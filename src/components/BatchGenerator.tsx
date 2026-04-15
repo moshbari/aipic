@@ -4,6 +4,40 @@ import { useState, useMemo, useCallback } from 'react';
 import { useSession } from 'next-auth/react';
 import { MODELS, calculateCost, getModelSizes, getModelQualities, getCostSummary, formatPrice } from '@/lib/models';
 
+// Client-side mirror of the server's smart dimension detection
+function detectSizeFromPrompt(prompt: string): string | null {
+  const lower = prompt.toLowerCase();
+
+  // 1. Exact pixel dimensions (e.g. "1024x1536")
+  const pixelMatch = prompt.match(/\b(\d{3,4})\s*[xX×]\s*(\d{3,4})\b/);
+  if (pixelMatch) {
+    const extracted = `${pixelMatch[1]}x${pixelMatch[2]}`;
+    if (['1024x1024', '1536x1024', '1024x1536', 'auto'].includes(extracted)) {
+      return extracted;
+    }
+  }
+
+  // 2. Inch dimensions (e.g. "6x3.5 inches", "5x5 inches")
+  const inchMatch = prompt.match(/\b(\d+(?:\.\d+)?)\s*[xX×]\s*(\d+(?:\.\d+)?)\s*(?:inches|inch|in\b|")?/i);
+  if (inchMatch) {
+    const w = parseFloat(inchMatch[1]);
+    const h = parseFloat(inchMatch[2]);
+    if (w > 0 && h > 0) {
+      const ratio = w / h;
+      if (ratio > 1.15) return '1536x1024';
+      if (ratio < 0.87) return '1024x1536';
+      return '1024x1024';
+    }
+  }
+
+  // 3. Orientation keywords
+  if (lower.includes('landscape')) return '1536x1024';
+  if (lower.includes('portrait')) return '1024x1536';
+  if (lower.includes('square')) return '1024x1024';
+
+  return null;
+}
+
 interface GenerationResult {
   id?: string;
   prompt: string;
@@ -126,8 +160,21 @@ export function BatchGenerator() {
     [rawText, separator, customSeparator]
   );
 
+  // Calculate cost per prompt (accounting for per-prompt dimension overrides)
+  const promptCosts = useMemo(() => {
+    return parsedPrompts.map((prompt) => {
+      const detectedSize = detectSizeFromPrompt(prompt);
+      const effectiveSize = detectedSize || size;
+      return {
+        detectedSize,
+        effectiveSize,
+        cost: calculateCost(selectedModel, effectiveSize, quality),
+      };
+    });
+  }, [parsedPrompts, selectedModel, size, quality]);
+
   const costPerImage = calculateCost(selectedModel, size, quality);
-  const totalCost = parsedPrompts.length * costPerImage;
+  const totalCost = promptCosts.reduce((sum, p) => sum + p.cost, 0) || 0;
 
   const qualities = getModelQualities(selectedModel);
   const sizes = getModelSizes(selectedModel);
@@ -411,9 +458,16 @@ export function BatchGenerator() {
                   <span className="text-purple-400 font-bold text-xs mt-0.5 shrink-0 w-6 h-6 bg-purple-600/20 rounded flex items-center justify-center">
                     {i + 1}
                   </span>
-                  <p className="text-gray-300 text-xs leading-relaxed line-clamp-3">
-                    {prompt}
-                  </p>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-gray-300 text-xs leading-relaxed line-clamp-3">
+                      {prompt}
+                    </p>
+                    {promptCosts[i]?.detectedSize && (
+                      <span className="inline-block mt-1 text-[10px] bg-blue-500/20 text-blue-400 px-1.5 py-0.5 rounded font-medium">
+                        Size from prompt: {promptCosts[i].detectedSize} — {formatPrice(promptCosts[i].cost)}/image
+                      </span>
+                    )}
+                  </div>
                 </div>
               ))}
             </div>
@@ -428,8 +482,8 @@ export function BatchGenerator() {
               <p className="text-xl font-bold text-white">{parsedPrompts.length}</p>
             </div>
             <div>
-              <p className="text-gray-400 text-xs mb-1">Cost Per Image</p>
-              <p className="text-xl font-bold text-green-400">${costPerImage.toFixed(4)}</p>
+              <p className="text-gray-400 text-xs mb-1">{promptCosts.some(p => p.detectedSize) ? 'Avg Cost/Image' : 'Cost Per Image'}</p>
+              <p className="text-xl font-bold text-green-400">${parsedPrompts.length > 0 ? (totalCost / parsedPrompts.length).toFixed(4) : costPerImage.toFixed(4)}</p>
             </div>
             <div>
               <p className="text-gray-400 text-xs mb-1">Total Estimated</p>

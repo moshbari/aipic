@@ -112,17 +112,52 @@ export async function POST(request: NextRequest) {
 }
 
 // Valid sizes for GPT Image models
-const VALID_SIZES = ['1024x1024', '1536x1024', '1024x1536', 'auto'];
+const VALID_PIXEL_SIZES = ['1024x1024', '1536x1024', '1024x1536', 'auto'];
 
-// Extract dimension from prompt text if present (e.g. "1024x1536", "1536 x 1024")
+/**
+ * Smart dimension extraction from prompt text.
+ * Handles:
+ *  1. Pixel dimensions: "1024x1536", "1536 x 1024"
+ *  2. Inch dimensions: "6x3.5 inches", "5x5 inches", "6 x 4 inches"
+ *  3. Keywords: "landscape", "portrait", "square"
+ *  4. Size labels: "Size: landscape 6x3.5 inches"
+ *
+ * Inch-based logic: compares width vs height aspect ratio
+ *   - width > height (landscape) → 1536x1024
+ *   - width < height (portrait)  → 1024x1536
+ *   - width ≈ height (square)    → 1024x1024
+ */
 function extractSizeFromPrompt(prompt: string): string | null {
-  const match = prompt.match(/\b(\d{3,4})\s*[xX×]\s*(\d{3,4})\b/);
-  if (match) {
-    const extracted = `${match[1]}x${match[2]}`;
-    if (VALID_SIZES.includes(extracted)) {
+  const lower = prompt.toLowerCase();
+
+  // 1. Check for exact pixel dimensions first (e.g. "1024x1536")
+  const pixelMatch = prompt.match(/\b(\d{3,4})\s*[xX×]\s*(\d{3,4})\b/);
+  if (pixelMatch) {
+    const extracted = `${pixelMatch[1]}x${pixelMatch[2]}`;
+    if (VALID_PIXEL_SIZES.includes(extracted)) {
       return extracted;
     }
   }
+
+  // 2. Check for inch dimensions (e.g. "6x3.5 inches", "5 x 5 inches", "6x3.5"")
+  //    Matches patterns like: 6x3.5, 5x5, 6 x 4, 6×3.5 — with optional "inches"/"in" after
+  const inchMatch = prompt.match(/\b(\d+(?:\.\d+)?)\s*[xX×]\s*(\d+(?:\.\d+)?)\s*(?:inches|inch|in\b|")?/i);
+  if (inchMatch) {
+    const w = parseFloat(inchMatch[1]);
+    const h = parseFloat(inchMatch[2]);
+    if (w > 0 && h > 0) {
+      const ratio = w / h;
+      if (ratio > 1.15) return '1536x1024';      // landscape
+      if (ratio < 0.87) return '1024x1536';       // portrait
+      return '1024x1024';                          // square-ish
+    }
+  }
+
+  // 3. Check for orientation keywords as fallback
+  if (lower.includes('landscape')) return '1536x1024';
+  if (lower.includes('portrait')) return '1024x1536';
+  if (lower.includes('square')) return '1024x1024';
+
   return null;
 }
 
