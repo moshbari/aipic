@@ -17,7 +17,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { prompts, model, quality, size, style } = await request.json();
+    const { prompts, model, quality, size } = await request.json();
 
     if (!prompts || !Array.isArray(prompts) || prompts.length === 0) {
       return NextResponse.json(
@@ -68,7 +68,6 @@ export async function POST(request: NextRequest) {
           model,
           quality,
           size,
-          style,
           batchId,
           userId: session.user.id,
           index: i + batchIndex,
@@ -112,6 +111,21 @@ export async function POST(request: NextRequest) {
   }
 }
 
+// Valid sizes for GPT Image models
+const VALID_SIZES = ['1024x1024', '1536x1024', '1024x1536', 'auto'];
+
+// Extract dimension from prompt text if present (e.g. "1024x1536", "1536 x 1024")
+function extractSizeFromPrompt(prompt: string): string | null {
+  const match = prompt.match(/\b(\d{3,4})\s*[xX×]\s*(\d{3,4})\b/);
+  if (match) {
+    const extracted = `${match[1]}x${match[2]}`;
+    if (VALID_SIZES.includes(extracted)) {
+      return extracted;
+    }
+  }
+  return null;
+}
+
 async function generateSingleImage(
   openai: OpenAI,
   params: {
@@ -119,14 +133,18 @@ async function generateSingleImage(
     model: string;
     quality?: string;
     size?: string;
-    style?: string;
     batchId: string;
     userId: string;
     index: number;
   }
 ) {
-  const { prompt, model, quality, size, style, batchId, userId, index } = params;
-  const cost = calculateCost(model, size || '1024x1024', quality);
+  const { prompt, model, quality, size, batchId, userId, index } = params;
+
+  // Check if the prompt contains a dimension — if so, it overrides the global size setting
+  const promptSize = extractSizeFromPrompt(prompt);
+  const effectiveSize = promptSize || size || '1024x1024';
+
+  const cost = calculateCost(model, effectiveSize, quality);
 
   // Create record in DB
   let imageRecord = await prisma.generatedImage.create({
@@ -135,8 +153,7 @@ async function generateSingleImage(
       prompt,
       model,
       quality,
-      size: size || '1024x1024',
-      style,
+      size: effectiveSize,
       cost,
       imageUrl: '',
       batchId,
@@ -147,44 +164,20 @@ async function generateSingleImage(
   try {
     let imageUrl = '';
 
-    if (model === 'gpt-image-1.5' || model === 'gpt-image-1' || model === 'gpt-image-1-mini') {
-      // GPT Image models use the newer images API
-      const response = await openai.images.generate({
-        model: model as any,
-        prompt,
-        size: (size || '1024x1024') as '1024x1024' | '1536x1024' | '1024x1536' | 'auto',
-        quality: (quality || 'medium') as 'low' | 'medium' | 'high',
-        n: 1,
-      });
+    // GPT Image models (gpt-image-1.5, gpt-image-1, gpt-image-1-mini)
+    const response = await openai.images.generate({
+      model: model as any,
+      prompt,
+      size: effectiveSize as '1024x1024' | '1536x1024' | '1024x1536' | 'auto',
+      quality: (quality || 'medium') as 'low' | 'medium' | 'high',
+      n: 1,
+    });
 
-      // GPT Image models may return base64 or URL
-      if (response.data[0]?.url) {
-        imageUrl = response.data[0].url;
-      } else if (response.data[0]?.b64_json) {
-        imageUrl = `data:image/png;base64,${response.data[0].b64_json}`;
-      }
-    } else if (model === 'dall-e-3') {
-      // Clean size for DALL-E 3 (remove -hd suffix if present)
-      const cleanSize = size?.replace('-hd', '') || '1024x1024';
-      const response = await openai.images.generate({
-        model: 'dall-e-3',
-        prompt,
-        size: cleanSize as '1024x1024' | '1792x1024' | '1024x1792',
-        quality: quality === 'hd' ? 'hd' : 'standard',
-        style: (style || 'natural') as 'natural' | 'vivid',
-        n: 1,
-      });
-
-      imageUrl = response.data[0]?.url || '';
-    } else if (model === 'dall-e-2') {
-      const response = await openai.images.generate({
-        model: 'dall-e-2',
-        prompt,
-        size: (size || '1024x1024') as '256x256' | '512x512' | '1024x1024',
-        n: 1,
-      });
-
-      imageUrl = response.data[0]?.url || '';
+    // GPT Image models may return base64 or URL
+    if (response.data[0]?.url) {
+      imageUrl = response.data[0].url;
+    } else if (response.data[0]?.b64_json) {
+      imageUrl = `data:image/png;base64,${response.data[0].b64_json}`;
     }
 
     if (!imageUrl) {

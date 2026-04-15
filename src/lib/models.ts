@@ -6,12 +6,9 @@ export interface ModelConfig {
   qualityNote: string; // Helps user understand what quality level means
   sizes: string[];
   qualities: string[];
-  styles?: string[];
   pricing: { [key: string]: number }; // "size-quality" => cost per image
   defaultSize: string;
   defaultQuality: string;
-  deprecated?: boolean;
-  deprecationDate?: string;
   recommended?: boolean;
 }
 
@@ -92,46 +89,6 @@ export const MODELS: { [key: string]: ModelConfig } = {
     defaultSize: '1024x1024',
     defaultQuality: 'medium',
   },
-  'dall-e-3': {
-    id: 'dall-e-3',
-    name: 'DALL-E 3',
-    provider: 'openai',
-    description: 'Strong prompt following with vivid/natural styles. Being deprecated May 12, 2026.',
-    qualityNote: 'Standard = good quality, HD = more detail & sharper (2x cost)',
-    sizes: ['1024x1024', '1792x1024', '1024x1792'],
-    qualities: ['standard', 'hd'],
-    styles: ['vivid', 'natural'],
-    pricing: {
-      '1024x1024-standard': 0.040,
-      '1024x1024-hd': 0.080,
-      '1792x1024-standard': 0.080,
-      '1792x1024-hd': 0.120,
-      '1024x1792-standard': 0.080,
-      '1024x1792-hd': 0.120,
-    },
-    defaultSize: '1024x1024',
-    defaultQuality: 'standard',
-    deprecated: true,
-    deprecationDate: '2026-05-12',
-  },
-  'dall-e-2': {
-    id: 'dall-e-2',
-    name: 'DALL-E 2',
-    provider: 'openai',
-    description: 'Legacy model. Cheapest DALL-E option but lower quality. Deprecated May 12, 2026.',
-    qualityNote: 'Single quality level. Smaller sizes are slightly cheaper.',
-    sizes: ['256x256', '512x512', '1024x1024'],
-    qualities: ['standard'],
-    pricing: {
-      '256x256-standard': 0.016,
-      '512x512-standard': 0.018,
-      '1024x1024-standard': 0.020,
-    },
-    defaultSize: '1024x1024',
-    defaultQuality: 'standard',
-    deprecated: true,
-    deprecationDate: '2026-05-12',
-  },
 };
 
 export function calculateCost(
@@ -156,11 +113,6 @@ export function getModelSizes(modelId: string): string[] {
 export function getModelQualities(modelId: string): string[] {
   const model = MODELS[modelId];
   return model ? model.qualities : [];
-}
-
-export function getModelStyles(modelId: string): string[] {
-  const model = MODELS[modelId];
-  return model?.styles || [];
 }
 
 // Get a human-readable cost summary for display

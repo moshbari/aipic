@@ -111,10 +111,9 @@ export function BatchGenerator() {
   const [rawText, setRawText] = useState('');
   const [separator, setSeparator] = useState<SeparatorType>('double-newline');
   const [customSeparator, setCustomSeparator] = useState('');
-  const [selectedModel, setSelectedModel] = useState('dall-e-3');
-  const [quality, setQuality] = useState('standard');
+  const [selectedModel, setSelectedModel] = useState('gpt-image-1.5');
+  const [quality, setQuality] = useState('medium');
   const [size, setSize] = useState('1024x1024');
-  const [style, setStyle] = useState('natural');
   const [isLoading, setIsLoading] = useState(false);
   const [results, setResults] = useState<GenerationResult[]>([]);
   const [progress, setProgress] = useState({ current: 0, total: 0 });
@@ -192,7 +191,6 @@ export function BatchGenerator() {
           model: selectedModel,
           quality: quality || undefined,
           size,
-          style,
         }),
       });
 
@@ -259,8 +257,6 @@ export function BatchGenerator() {
                 className={`text-left p-3 rounded-xl border transition-all ${
                   selectedModel === key
                     ? 'bg-purple-600/20 border-purple-500 ring-1 ring-purple-500/50'
-                    : model.deprecated
-                    ? 'bg-slate-800/40 border-slate-700/50 opacity-60 hover:opacity-80'
                     : 'bg-slate-700/40 border-slate-600/50 hover:border-purple-500/40'
                 }`}
               >
@@ -268,9 +264,6 @@ export function BatchGenerator() {
                   <span className="text-sm font-semibold text-white">{model.name}</span>
                   {model.recommended && (
                     <span className="text-[10px] bg-green-500/20 text-green-400 px-1.5 py-0.5 rounded-full font-medium">BEST</span>
-                  )}
-                  {model.deprecated && (
-                    <span className="text-[10px] bg-red-500/20 text-red-400 px-1.5 py-0.5 rounded-full font-medium">DEPRECATED</span>
                   )}
                 </div>
                 <p className="text-[11px] text-gray-400 leading-tight mb-1.5">{model.description}</p>
@@ -283,13 +276,10 @@ export function BatchGenerator() {
         {/* Model Info Banner */}
         <div className="bg-slate-700/30 rounded-lg border border-slate-600/30 px-4 py-2.5 mb-4 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
           <span className="text-gray-400">{MODELS[selectedModel]?.qualityNote}</span>
-          {MODELS[selectedModel]?.deprecated && MODELS[selectedModel]?.deprecationDate && (
-            <span className="text-red-400 font-medium">⚠ Shuts down {MODELS[selectedModel].deprecationDate}</span>
-          )}
         </div>
 
         {/* Settings Row: Size, Quality, Style */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
           {sizes.length > 0 && (
             <div>
               <label className="block text-gray-300 font-medium mb-1.5 text-sm">Size</label>
@@ -327,19 +317,6 @@ export function BatchGenerator() {
             </div>
           )}
 
-          {selectedModel === 'dall-e-3' && (
-            <div>
-              <label className="block text-gray-300 font-medium mb-1.5 text-sm">Style</label>
-              <select
-                value={style}
-                onChange={(e) => setStyle(e.target.value)}
-                className="w-full bg-slate-700/80 border border-slate-600 rounded-lg px-3 py-2.5 text-white focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent text-sm"
-              >
-                <option value="natural">Natural</option>
-                <option value="vivid">Vivid</option>
-              </select>
-            </div>
-          )}
         </div>
 
         {/* Live Price Per Image */}
