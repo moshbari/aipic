@@ -190,8 +190,15 @@ export function BatchGenerator() {
 
   const downloadImage = useCallback(async (imageUrl: string, promptText: string, index: number) => {
     try {
-      // Use our proxy endpoint to avoid CORS issues
-      const response = await fetch(`/api/images/download?url=${encodeURIComponent(imageUrl)}`);
+      let response: Response;
+
+      if (imageUrl.startsWith('data:')) {
+        // Base64 data URL — convert directly to blob, no proxy needed
+        response = await fetch(imageUrl);
+      } else {
+        // External URL — use our proxy endpoint to avoid CORS issues
+        response = await fetch(`/api/images/download?url=${encodeURIComponent(imageUrl)}`);
+      }
       const blob = await response.blob();
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
