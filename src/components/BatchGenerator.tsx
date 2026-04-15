@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useCallback } from 'react';
 import { useSession } from 'next-auth/react';
-import { MODELS, calculateCost, getModelSizes, getModelQualities } from '@/lib/models';
+import { MODELS, calculateCost, getModelSizes, getModelQualities, getCostSummary, formatPrice } from '@/lib/models';
 
 interface GenerationResult {
   id?: string;
@@ -248,23 +248,48 @@ export function BatchGenerator() {
           </div>
         </div>
 
-        {/* Model & Settings Row */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-          <div>
-            <label className="block text-gray-300 font-medium mb-1.5 text-sm">Model</label>
-            <select
-              value={selectedModel}
-              onChange={(e) => handleModelChange(e.target.value)}
-              className="w-full bg-slate-700/80 border border-slate-600 rounded-lg px-3 py-2.5 text-white focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent text-sm"
-            >
-              {Object.entries(MODELS).map(([key, model]) => (
-                <option key={key} value={key}>
-                  {model.name}
-                </option>
-              ))}
-            </select>
+        {/* Model Selection */}
+        <div className="mb-4">
+          <label className="block text-gray-300 font-medium mb-2 text-sm">Model</label>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+            {Object.entries(MODELS).map(([key, model]) => (
+              <button
+                key={key}
+                onClick={() => handleModelChange(key)}
+                className={`text-left p-3 rounded-xl border transition-all ${
+                  selectedModel === key
+                    ? 'bg-purple-600/20 border-purple-500 ring-1 ring-purple-500/50'
+                    : model.deprecated
+                    ? 'bg-slate-800/40 border-slate-700/50 opacity-60 hover:opacity-80'
+                    : 'bg-slate-700/40 border-slate-600/50 hover:border-purple-500/40'
+                }`}
+              >
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="text-sm font-semibold text-white">{model.name}</span>
+                  {model.recommended && (
+                    <span className="text-[10px] bg-green-500/20 text-green-400 px-1.5 py-0.5 rounded-full font-medium">BEST</span>
+                  )}
+                  {model.deprecated && (
+                    <span className="text-[10px] bg-red-500/20 text-red-400 px-1.5 py-0.5 rounded-full font-medium">DEPRECATED</span>
+                  )}
+                </div>
+                <p className="text-[11px] text-gray-400 leading-tight mb-1.5">{model.description}</p>
+                <p className="text-[11px] text-purple-400 font-medium">{getCostSummary(key)}</p>
+              </button>
+            ))}
           </div>
+        </div>
 
+        {/* Model Info Banner */}
+        <div className="bg-slate-700/30 rounded-lg border border-slate-600/30 px-4 py-2.5 mb-4 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
+          <span className="text-gray-400">{MODELS[selectedModel]?.qualityNote}</span>
+          {MODELS[selectedModel]?.deprecated && MODELS[selectedModel]?.deprecationDate && (
+            <span className="text-red-400 font-medium">⚠ Shuts down {MODELS[selectedModel].deprecationDate}</span>
+          )}
+        </div>
+
+        {/* Settings Row: Size, Quality, Style */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
           {sizes.length > 0 && (
             <div>
               <label className="block text-gray-300 font-medium mb-1.5 text-sm">Size</label>
@@ -275,7 +300,7 @@ export function BatchGenerator() {
               >
                 {sizes.map((s) => (
                   <option key={s} value={s}>
-                    {s}
+                    {s === 'auto' ? 'Auto (let AI decide)' : s}
                   </option>
                 ))}
               </select>
@@ -290,11 +315,14 @@ export function BatchGenerator() {
                 onChange={(e) => setQuality(e.target.value)}
                 className="w-full bg-slate-700/80 border border-slate-600 rounded-lg px-3 py-2.5 text-white focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent text-sm"
               >
-                {qualities.map((q) => (
-                  <option key={q} value={q}>
-                    {q.charAt(0).toUpperCase() + q.slice(1)}
-                  </option>
-                ))}
+                {qualities.map((q) => {
+                  const price = calculateCost(selectedModel, size, q);
+                  return (
+                    <option key={q} value={q}>
+                      {q.charAt(0).toUpperCase() + q.slice(1)} — {formatPrice(price)}/image
+                    </option>
+                  );
+                })}
               </select>
             </div>
           )}
@@ -312,6 +340,12 @@ export function BatchGenerator() {
               </select>
             </div>
           )}
+        </div>
+
+        {/* Live Price Per Image */}
+        <div className="bg-purple-500/10 border border-purple-500/20 rounded-lg px-4 py-2.5 mb-6 flex items-center justify-between">
+          <span className="text-sm text-purple-300">Price per image with current settings:</span>
+          <span className="text-lg font-bold text-purple-400">{formatPrice(calculateCost(selectedModel, size, quality))}</span>
         </div>
 
         {/* Separator Selection */}

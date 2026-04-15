@@ -147,21 +147,20 @@ async function generateSingleImage(
   try {
     let imageUrl = '';
 
-    if (model === 'gpt-image-1') {
-      // GPT Image model uses the newer images API
+    if (model === 'gpt-image-1.5' || model === 'gpt-image-1' || model === 'gpt-image-1-mini') {
+      // GPT Image models use the newer images API
       const response = await openai.images.generate({
-        model: 'gpt-image-1',
+        model: model as any,
         prompt,
         size: (size || '1024x1024') as '1024x1024' | '1536x1024' | '1024x1536' | 'auto',
         quality: (quality || 'medium') as 'low' | 'medium' | 'high',
         n: 1,
       });
 
-      // gpt-image-1 returns base64 by default, or URL
+      // GPT Image models may return base64 or URL
       if (response.data[0]?.url) {
         imageUrl = response.data[0].url;
       } else if (response.data[0]?.b64_json) {
-        // Convert base64 to a data URL for display
         imageUrl = `data:image/png;base64,${response.data[0].b64_json}`;
       }
     } else if (model === 'dall-e-3') {
