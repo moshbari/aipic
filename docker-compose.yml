@@ -11,7 +11,7 @@ services:
       MYSQL_USER: ${DB_USER:-aipic}
       MYSQL_PASSWORD: ${DB_PASSWORD:-aipic}
     ports:
-      - "3306:3306"
+      - "3307:3306"
     volumes:
       - mysql_data:/var/lib/mysql
     networks:
@@ -29,7 +29,7 @@ services:
       OPENAI_API_KEY: ${OPENAI_API_KEY}
       NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost}
     ports:
-      - "3000:3000"
+      - "3002:3000"
     depends_on:
       - mysql
     volumes:

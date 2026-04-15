@@ -1,0 +1,12 @@
+services:
+  mysql:
+    ports:
+      - "3307:3306"
+
+  app:
+    ports:
+      - "3002:3000"
+
+  nginx:
+    profiles:
+      - disabled
