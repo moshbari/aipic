@@ -28,6 +28,9 @@ services:
       ENCRYPTION_KEY: ${ENCRYPTION_KEY}
       OPENAI_API_KEY: ${OPENAI_API_KEY}
       NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost}
+      GHL_API_KEY: ${GHL_API_KEY}
+      GHL_LOCATION_ID: ${GHL_LOCATION_ID}
+      GHL_MEDIA_FOLDER: ${GHL_MEDIA_FOLDER}
     ports:
       - "3002:3000"
     depends_on:
