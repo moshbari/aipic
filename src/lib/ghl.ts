@@ -42,11 +42,12 @@ export async function uploadToGHL(
   formData.append("file", blob, filename);
   formData.append("hosted", "false");
   formData.append("name", filename);
-  if (mediaFolder) {
-    formData.append("folderId", mediaFolder);
-  }
 
-  const response = await fetch(`${GHL_API_BASE}/medias/upload-file`, {
+  const uploadUrl = mediaFolder
+    ? `${GHL_API_BASE}/medias/upload-file?folderId=${mediaFolder}`
+    : `${GHL_API_BASE}/medias/upload-file`;
+
+  const response = await fetch(uploadUrl, {
     method: "POST",
     headers: {
       "Authorization": `Bearer ${apiKey}`,
