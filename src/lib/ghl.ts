@@ -36,15 +36,15 @@ export async function uploadToGHL(
     ? imageBuffer
     : Buffer.from(imageBuffer);
 
-  // Prefix filename with folder path if configured
-  const uploadName = mediaFolder ? `${mediaFolder}/${filename}` : filename;
-
   // Build multipart form data
   const formData = new FormData();
   const blob = new Blob([buffer], { type: "image/png" });
   formData.append("file", blob, filename);
   formData.append("hosted", "false");
-  formData.append("name", uploadName);
+  formData.append("name", filename);
+  if (mediaFolder) {
+    formData.append("folderId", mediaFolder);
+  }
 
   const response = await fetch(`${GHL_API_BASE}/medias/upload-file`, {
     method: "POST",
