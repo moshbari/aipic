@@ -4,6 +4,7 @@ import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { decryptApiKey } from '@/lib/encryption';
 import { calculateCost } from '@/lib/models';
+import { isGHLConfigured, uploadFromUrlToGHL, uploadBase64ToGHL } from '@/lib/ghl';
 import { v4 as uuidv4 } from 'uuid';
 import OpenAI from 'openai';
 
@@ -219,11 +220,14 @@ async function generateSingleImage(
       throw new Error('No image URL returned from API');
     }
 
+    // Upload to GHL for permanent hosting
+    const permanentUrl = await uploadImageToGHL(imageUrl, imageRecord.id);
+
     // Update record with result
     imageRecord = await prisma.generatedImage.update({
       where: { id: imageRecord.id },
       data: {
-        imageUrl,
+        imageUrl: permanentUrl,
         status: 'done',
       },
     });
@@ -231,7 +235,7 @@ async function generateSingleImage(
     return {
       id: imageRecord.id,
       prompt,
-      imageUrl,
+      imageUrl: permanentUrl,
       status: 'done',
       cost,
     };
@@ -252,16 +256,20 @@ async function generateSingleImage(
           n: 1,
         });
 
-        const retryUrl = retryResponse.data[0]?.url || '';
+        let retryUrl = retryResponse.data[0]?.url || '';
+        if (!retryUrl && retryResponse.data[0]?.b64_json) {
+          retryUrl = `data:image/png;base64,${retryResponse.data[0].b64_json}`;
+        }
         if (retryUrl) {
+          const retryPermanentUrl = await uploadImageToGHL(retryUrl, imageRecord.id);
           imageRecord = await prisma.generatedImage.update({
             where: { id: imageRecord.id },
-            data: { imageUrl: retryUrl, status: 'done' },
+            data: { imageUrl: retryPermanentUrl, status: 'done' },
           });
           return {
             id: imageRecord.id,
             prompt,
-            imageUrl: retryUrl,
+            imageUrl: retryPermanentUrl,
             status: 'done',
             cost,
           };
@@ -283,5 +291,20 @@ async function generateSingleImage(
       errorMessage,
       cost,
     };
+  }
+}
+
+async function uploadImageToGHL(imageUrl: string, imageId: string): Promise<string> {
+  if (!isGHLConfigured()) return imageUrl;
+  try {
+    const filename = `aipic-${imageId}.png`;
+    if (imageUrl.startsWith('data:image/')) {
+      return await uploadBase64ToGHL(imageUrl, filename);
+    } else {
+      return await uploadFromUrlToGHL(imageUrl, filename);
+    }
+  } catch (error) {
+    console.error('GHL upload failed, using original URL:', error);
+    return imageUrl;
   }
 }
