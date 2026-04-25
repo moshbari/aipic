@@ -412,6 +412,13 @@ export function BatchGenerator() {
           )}
         </div>
 
+        {/* Usage Tip */}
+        <div className="mb-3 bg-purple-500/10 border border-purple-500/40 rounded-lg px-4 py-3">
+          <p className="text-purple-100 font-bold text-base leading-snug">
+            For best results, please keep your batch under 10 prompts at a time.
+          </p>
+        </div>
+
         {/* Text Area */}
         <div className="mb-4">
           <div className="flex items-center justify-between mb-2">
@@ -517,6 +524,23 @@ export function BatchGenerator() {
                   width: `${(progress.current / progress.total) * 100}%`,
                 }}
               />
+            </div>
+          </div>
+        )}
+
+        {/* Over-limit Warning */}
+        {parsedPrompts.length > 10 && (
+          <div className="mb-4 bg-amber-500/15 border border-amber-500/60 rounded-lg px-4 py-3 flex items-start gap-3">
+            <svg className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+            </svg>
+            <div>
+              <p className="text-amber-200 font-bold text-sm leading-snug">
+                More than 10 prompts detected
+              </p>
+              <p className="text-amber-100/80 text-xs mt-0.5 leading-relaxed">
+                This may cause interruptions and the app might not work properly. We recommend splitting into smaller batches.
+              </p>
             </div>
           </div>
         )}
