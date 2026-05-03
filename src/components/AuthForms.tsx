@@ -64,19 +64,19 @@ export function AuthForms() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center p-4">
+    <div className="min-h-screen bg-canvas flex items-center justify-center p-4">
       <div className="w-full max-w-md">
-        <div className="bg-slate-800 border border-purple-500 rounded-2xl shadow-2xl p-8">
-          <h1 className="text-4xl font-bold text-center mb-2 text-white">
-            ✨ AIPic
+        <div className="bg-surface border border-champagne rounded-2xl shadow-2xl p-8">
+          <h1 className="text-4xl font-bold text-center mb-2 text-bone tracking-wide">
+            <span className="text-champagne">◆</span> AIPic
           </h1>
-          <p className="text-center text-gray-400 mb-8">
+          <p className="text-center text-taupe mb-8">
             Batch AI Image Generator
           </p>
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label className="block text-gray-300 font-medium mb-2">
+              <label className="block text-bone-muted font-medium mb-2">
                 Email
               </label>
               <input
@@ -86,13 +86,13 @@ export function AuthForms() {
                   setFormData({ ...formData, email: e.target.value })
                 }
                 placeholder="your@email.com"
-                className="w-full bg-slate-700 border border-purple-500 rounded-lg px-4 py-2 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-600"
+                className="w-full bg-surface-2 border border-champagne rounded-lg px-4 py-2 text-bone placeholder-taupe focus:outline-none focus:ring-2 focus:ring-champagne"
               />
             </div>
 
             {!isLogin && (
               <div>
-                <label className="block text-gray-300 font-medium mb-2">
+                <label className="block text-bone-muted font-medium mb-2">
                   Name
                 </label>
                 <input
@@ -102,13 +102,13 @@ export function AuthForms() {
                     setFormData({ ...formData, name: e.target.value })
                   }
                   placeholder="Your Name"
-                  className="w-full bg-slate-700 border border-purple-500 rounded-lg px-4 py-2 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-600"
+                  className="w-full bg-surface-2 border border-champagne rounded-lg px-4 py-2 text-bone placeholder-taupe focus:outline-none focus:ring-2 focus:ring-champagne"
                 />
               </div>
             )}
 
             <div>
-              <label className="block text-gray-300 font-medium mb-2">
+              <label className="block text-bone-muted font-medium mb-2">
                 Password
               </label>
               <input
@@ -118,14 +118,14 @@ export function AuthForms() {
                   setFormData({ ...formData, password: e.target.value })
                 }
                 placeholder="••••••••"
-                className="w-full bg-slate-700 border border-purple-500 rounded-lg px-4 py-2 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-600"
+                className="w-full bg-surface-2 border border-champagne rounded-lg px-4 py-2 text-bone placeholder-taupe focus:outline-none focus:ring-2 focus:ring-champagne"
               />
             </div>
 
             <button
               type="submit"
               disabled={isLoading}
-              className="w-full bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 disabled:opacity-50 text-white font-bold py-3 px-6 rounded-lg transition duration-200 mt-6"
+              className="w-full bg-champagne hover:bg-champagne-hi text-canvas disabled:opacity-50 text-bone font-bold py-3 px-6 rounded-lg transition duration-200 mt-6"
             >
               {isLoading ? 'Loading...' : isLogin ? 'Sign In' : 'Sign Up'}
             </button>
@@ -135,7 +135,7 @@ export function AuthForms() {
             <button
               type="button"
               onClick={() => setIsLogin(!isLogin)}
-              className="w-full text-gray-400 hover:text-white transition"
+              className="w-full text-taupe hover:text-bone transition"
             >
               {isLogin
                 ? "Don't have an account? Sign up"

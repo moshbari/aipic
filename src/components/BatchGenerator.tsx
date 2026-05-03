@@ -289,20 +289,20 @@ export function BatchGenerator() {
   return (
     <div className="space-y-6">
       {/* Main Generator Card */}
-      <div className="bg-gradient-to-br from-slate-800 to-slate-900 rounded-2xl border border-purple-500/30 p-8 shadow-2xl shadow-purple-500/5">
+      <div className="bg-surface rounded-2xl border border-champagne/30 p-8 shadow-2xl ">
         <div className="flex items-center gap-3 mb-8">
-          <div className="w-10 h-10 bg-gradient-to-r from-purple-600 to-blue-600 rounded-lg flex items-center justify-center text-xl">
+          <div className="w-10 h-10 bg-champagne rounded-lg flex items-center justify-center text-xl">
             🎨
           </div>
           <div>
-            <h2 className="text-2xl font-bold text-white">Batch Image Generator</h2>
-            <p className="text-gray-400 text-sm">Paste all your prompts, pick a separator, generate everything at once</p>
+            <h2 className="text-2xl font-bold text-bone">Batch Image Generator</h2>
+            <p className="text-taupe text-sm">Paste all your prompts, pick a separator, generate everything at once</p>
           </div>
         </div>
 
         {/* Model Selection */}
         <div className="mb-4">
-          <label className="block text-gray-300 font-medium mb-2 text-sm">Model</label>
+          <label className="block text-bone-muted font-medium mb-2 text-sm">Model</label>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
             {Object.entries(MODELS).map(([key, model]) => (
               <button
@@ -310,37 +310,37 @@ export function BatchGenerator() {
                 onClick={() => handleModelChange(key)}
                 className={`text-left p-3 rounded-xl border transition-all ${
                   selectedModel === key
-                    ? 'bg-purple-600/20 border-purple-500 ring-1 ring-purple-500/50'
-                    : 'bg-slate-700/40 border-slate-600/50 hover:border-purple-500/40'
+                    ? 'bg-champagne/15 border-champagne ring-1 ring-champagne/40'
+                    : 'bg-surface-2/60 border-border-soft hover:border-champagne/30'
                 }`}
               >
                 <div className="flex items-center gap-2 mb-1">
-                  <span className="text-sm font-semibold text-white">{model.name}</span>
+                  <span className="text-sm font-semibold text-bone">{model.name}</span>
                   {model.recommended && (
-                    <span className="text-[10px] bg-green-500/20 text-green-400 px-1.5 py-0.5 rounded-full font-medium">BEST</span>
+                    <span className="text-[10px] bg-success/15 text-success px-1.5 py-0.5 rounded-full font-medium">BEST</span>
                   )}
                 </div>
-                <p className="text-[11px] text-gray-400 leading-tight mb-1.5">{model.description}</p>
-                <p className="text-[11px] text-purple-400 font-medium">{getCostSummary(key)}</p>
+                <p className="text-[11px] text-taupe leading-tight mb-1.5">{model.description}</p>
+                <p className="text-[11px] text-champagne font-medium">{getCostSummary(key)}</p>
               </button>
             ))}
           </div>
         </div>
 
         {/* Model Info Banner */}
-        <div className="bg-slate-700/30 rounded-lg border border-slate-600/30 px-4 py-2.5 mb-4 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
-          <span className="text-gray-400">{MODELS[selectedModel]?.qualityNote}</span>
+        <div className="bg-surface-2/40 rounded-lg border border-border-soft px-4 py-2.5 mb-4 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
+          <span className="text-taupe">{MODELS[selectedModel]?.qualityNote}</span>
         </div>
 
         {/* Settings Row: Size, Quality, Style */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
           {sizes.length > 0 && (
             <div>
-              <label className="block text-gray-300 font-medium mb-1.5 text-sm">Size</label>
+              <label className="block text-bone-muted font-medium mb-1.5 text-sm">Size</label>
               <select
                 value={size}
                 onChange={(e) => setSize(e.target.value)}
-                className="w-full bg-slate-700/80 border border-slate-600 rounded-lg px-3 py-2.5 text-white focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent text-sm"
+                className="w-full bg-surface-2/90 border border-border-soft rounded-lg px-3 py-2.5 text-bone focus:outline-none focus:ring-2 focus:ring-champagne focus:border-transparent text-sm"
               >
                 {sizes.map((s) => (
                   <option key={s} value={s}>
@@ -353,11 +353,11 @@ export function BatchGenerator() {
 
           {qualities.length > 0 && (
             <div>
-              <label className="block text-gray-300 font-medium mb-1.5 text-sm">Quality</label>
+              <label className="block text-bone-muted font-medium mb-1.5 text-sm">Quality</label>
               <select
                 value={quality}
                 onChange={(e) => setQuality(e.target.value)}
-                className="w-full bg-slate-700/80 border border-slate-600 rounded-lg px-3 py-2.5 text-white focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent text-sm"
+                className="w-full bg-surface-2/90 border border-border-soft rounded-lg px-3 py-2.5 text-bone focus:outline-none focus:ring-2 focus:ring-champagne focus:border-transparent text-sm"
               >
                 {qualities.map((q) => {
                   const price = calculateCost(selectedModel, size, q);
@@ -374,16 +374,16 @@ export function BatchGenerator() {
         </div>
 
         {/* Live Price Per Image */}
-        <div className="bg-purple-500/10 border border-purple-500/20 rounded-lg px-4 py-2.5 mb-6 flex items-center justify-between">
-          <span className="text-sm text-purple-300">Price per image with current settings:</span>
-          <span className="text-lg font-bold text-purple-400">{formatPrice(calculateCost(selectedModel, size, quality))}</span>
+        <div className="bg-champagne/10 border border-champagne/20 rounded-lg px-4 py-2.5 mb-6 flex items-center justify-between">
+          <span className="text-sm text-champagne-hi">Price per image with current settings:</span>
+          <span className="text-lg font-bold text-champagne">{formatPrice(calculateCost(selectedModel, size, quality))}</span>
         </div>
 
         {/* Separator Selection */}
-        <div className="bg-slate-700/40 rounded-xl border border-slate-600/50 p-4 mb-6">
+        <div className="bg-surface-2/60 rounded-xl border border-border-soft p-4 mb-6">
           <div className="flex items-center justify-between mb-3">
-            <label className="text-gray-300 font-medium text-sm">Prompt Separator</label>
-            <span className="text-xs text-gray-500">How should we split your prompts?</span>
+            <label className="text-bone-muted font-medium text-sm">Prompt Separator</label>
+            <span className="text-xs text-taupe">How should we split your prompts?</span>
           </div>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mb-3">
             {SEPARATOR_OPTIONS.map((opt) => (
@@ -392,8 +392,8 @@ export function BatchGenerator() {
                 onClick={() => setSeparator(opt.value)}
                 className={`px-3 py-2 rounded-lg text-xs font-medium transition-all ${
                   separator === opt.value
-                    ? 'bg-purple-600 text-white border border-purple-400'
-                    : 'bg-slate-600/50 text-gray-300 border border-slate-500/50 hover:border-purple-500/50'
+                    ? 'bg-champagne text-canvas text-bone border border-champagne-hi'
+                    : 'bg-surface-2/80 text-bone-muted border border-border-soft hover:border-champagne/40'
                 }`}
                 title={opt.description}
               >
@@ -407,14 +407,14 @@ export function BatchGenerator() {
               value={customSeparator}
               onChange={(e) => setCustomSeparator(e.target.value)}
               placeholder="Enter your custom separator (e.g., |||, ###, ===)"
-              className="w-full bg-slate-700 border border-slate-500 rounded-lg px-3 py-2 text-white text-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500"
+              className="w-full bg-surface-2 border border-border-soft rounded-lg px-3 py-2 text-bone text-sm placeholder-taupe focus:outline-none focus:ring-2 focus:ring-champagne"
             />
           )}
         </div>
 
         {/* Usage Tip */}
-        <div className="mb-3 bg-purple-500/10 border border-purple-500/40 rounded-lg px-4 py-3">
-          <p className="text-purple-100 font-bold text-base leading-snug">
+        <div className="mb-3 bg-champagne/10 border border-champagne/30 rounded-lg px-4 py-3">
+          <p className="text-bone font-bold text-base leading-snug">
             For best results, please keep your batch under 10 prompts at a time.
           </p>
         </div>
@@ -422,7 +422,7 @@ export function BatchGenerator() {
         {/* Text Area */}
         <div className="mb-4">
           <div className="flex items-center justify-between mb-2">
-            <label className="text-gray-300 font-medium text-sm">
+            <label className="text-bone-muted font-medium text-sm">
               Paste Your Prompts
             </label>
             <div className="flex items-center gap-4">
@@ -431,18 +431,18 @@ export function BatchGenerator() {
                   type="checkbox"
                   checked={autoDownload}
                   onChange={(e) => setAutoDownload(e.target.checked)}
-                  className="w-4 h-4 rounded border-slate-500 text-purple-600 focus:ring-purple-500 bg-slate-700"
+                  className="w-4 h-4 rounded border-border-soft text-champagne focus:ring-champagne bg-surface-2"
                 />
-                <span className="text-xs text-gray-400">Auto-download images</span>
+                <span className="text-xs text-taupe">Auto-download images</span>
               </label>
               <label className="flex items-center gap-2 cursor-pointer">
                 <input
                   type="checkbox"
                   checked={showPreview}
                   onChange={(e) => setShowPreview(e.target.checked)}
-                  className="w-4 h-4 rounded border-slate-500 text-purple-600 focus:ring-purple-500 bg-slate-700"
+                  className="w-4 h-4 rounded border-border-soft text-champagne focus:ring-champagne bg-surface-2"
                 />
-                <span className="text-xs text-gray-400">Show prompt preview</span>
+                <span className="text-xs text-taupe">Show prompt preview</span>
               </label>
             </div>
           </div>
@@ -450,34 +450,34 @@ export function BatchGenerator() {
             value={rawText}
             onChange={(e) => setRawText(e.target.value)}
             placeholder={`Paste all your prompts here...\n\nExample with double line breaks:\n\nA beautiful sunset over mountains with golden light...\n\nA futuristic city skyline at night with neon lights...\n\nA serene Japanese garden with cherry blossoms...`}
-            className="w-full h-56 bg-slate-700/60 border border-slate-600 rounded-xl px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent font-mono text-sm leading-relaxed resize-y"
+            className="w-full h-56 bg-surface-2/80 border border-border-soft rounded-xl px-4 py-3 text-bone placeholder-taupe focus:outline-none focus:ring-2 focus:ring-champagne focus:border-transparent font-mono text-sm leading-relaxed resize-y"
           />
         </div>
 
         {/* Parsed Prompts Preview */}
         {showPreview && parsedPrompts.length > 0 && (
-          <div className="mb-6 bg-slate-700/30 rounded-xl border border-slate-600/30 p-4 max-h-64 overflow-y-auto">
+          <div className="mb-6 bg-surface-2/40 rounded-xl border border-border-soft p-4 max-h-64 overflow-y-auto">
             <div className="flex items-center justify-between mb-3">
-              <p className="text-sm font-medium text-purple-400">
+              <p className="text-sm font-medium text-champagne">
                 Detected {parsedPrompts.length} prompt{parsedPrompts.length !== 1 ? 's' : ''}
               </p>
-              <span className="text-xs text-gray-500">Scroll to verify all prompts</span>
+              <span className="text-xs text-taupe">Scroll to verify all prompts</span>
             </div>
             <div className="space-y-2">
               {parsedPrompts.map((prompt, i) => (
                 <div
                   key={i}
-                  className="flex gap-3 items-start bg-slate-800/60 rounded-lg px-3 py-2 border border-slate-600/20"
+                  className="flex gap-3 items-start bg-surface/70 rounded-lg px-3 py-2 border border-border-soft"
                 >
-                  <span className="text-purple-400 font-bold text-xs mt-0.5 shrink-0 w-6 h-6 bg-purple-600/20 rounded flex items-center justify-center">
+                  <span className="text-champagne font-bold text-xs mt-0.5 shrink-0 w-6 h-6 bg-champagne/15 rounded flex items-center justify-center">
                     {i + 1}
                   </span>
                   <div className="flex-1 min-w-0">
-                    <p className="text-gray-300 text-xs leading-relaxed line-clamp-3">
+                    <p className="text-bone-muted text-xs leading-relaxed line-clamp-3">
                       {prompt}
                     </p>
                     {promptCosts[i]?.detectedSize && (
-                      <span className="inline-block mt-1 text-[10px] bg-blue-500/20 text-blue-400 px-1.5 py-0.5 rounded font-medium">
+                      <span className="inline-block mt-1 text-[10px] bg-champagne/10 text-champagne-hi px-1.5 py-0.5 rounded font-medium">
                         Size from prompt: {promptCosts[i].detectedSize} — {formatPrice(promptCosts[i].cost)}/image
                       </span>
                     )}
@@ -489,19 +489,19 @@ export function BatchGenerator() {
         )}
 
         {/* Cost Summary */}
-        <div className="bg-slate-700/40 rounded-xl border border-slate-600/50 p-4 mb-6">
+        <div className="bg-surface-2/60 rounded-xl border border-border-soft p-4 mb-6">
           <div className="grid grid-cols-3 gap-4 text-center">
             <div>
-              <p className="text-gray-400 text-xs mb-1">Images</p>
-              <p className="text-xl font-bold text-white">{parsedPrompts.length}</p>
+              <p className="text-taupe text-xs mb-1">Images</p>
+              <p className="text-xl font-bold text-bone">{parsedPrompts.length}</p>
             </div>
             <div>
-              <p className="text-gray-400 text-xs mb-1">{promptCosts.some(p => p.detectedSize) ? 'Avg Cost/Image' : 'Cost Per Image'}</p>
-              <p className="text-xl font-bold text-green-400">${parsedPrompts.length > 0 ? (totalCost / parsedPrompts.length).toFixed(4) : costPerImage.toFixed(4)}</p>
+              <p className="text-taupe text-xs mb-1">{promptCosts.some(p => p.detectedSize) ? 'Avg Cost/Image' : 'Cost Per Image'}</p>
+              <p className="text-xl font-bold text-success">${parsedPrompts.length > 0 ? (totalCost / parsedPrompts.length).toFixed(4) : costPerImage.toFixed(4)}</p>
             </div>
             <div>
-              <p className="text-gray-400 text-xs mb-1">Total Estimated</p>
-              <p className="text-xl font-bold text-purple-400">${totalCost.toFixed(3)}</p>
+              <p className="text-taupe text-xs mb-1">Total Estimated</p>
+              <p className="text-xl font-bold text-champagne">${totalCost.toFixed(3)}</p>
             </div>
           </div>
         </div>
@@ -510,16 +510,16 @@ export function BatchGenerator() {
         {isLoading && progress.total > 0 && (
           <div className="mb-6">
             <div className="flex justify-between items-center mb-2">
-              <p className="text-gray-300 text-sm">
+              <p className="text-bone-muted text-sm">
                 Generating: {progress.current}/{progress.total}
               </p>
-              <p className="text-purple-400 text-sm font-medium">
+              <p className="text-champagne text-sm font-medium">
                 {Math.round((progress.current / progress.total) * 100)}%
               </p>
             </div>
-            <div className="w-full bg-slate-700 rounded-full h-2.5">
+            <div className="w-full bg-surface-2 rounded-full h-2.5">
               <div
-                className="bg-gradient-to-r from-purple-600 to-blue-500 h-2.5 rounded-full transition-all duration-500 ease-out"
+                className="bg-champagne h-2.5 rounded-full transition-all duration-500 ease-out"
                 style={{
                   width: `${(progress.current / progress.total) * 100}%`,
                 }}
@@ -530,15 +530,15 @@ export function BatchGenerator() {
 
         {/* Over-limit Warning */}
         {parsedPrompts.length > 10 && (
-          <div className="mb-4 bg-amber-500/15 border border-amber-500/60 rounded-lg px-4 py-3 flex items-start gap-3">
-            <svg className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+          <div className="mb-4 bg-warning/15 border border-warning/50 rounded-lg px-4 py-3 flex items-start gap-3">
+            <svg className="w-5 h-5 text-warning shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
             </svg>
             <div>
-              <p className="text-amber-200 font-bold text-sm leading-snug">
+              <p className="text-bone font-bold text-sm leading-snug">
                 More than 10 prompts detected
               </p>
-              <p className="text-amber-100/80 text-xs mt-0.5 leading-relaxed">
+              <p className="text-bone-muted text-xs mt-0.5 leading-relaxed">
                 This may cause interruptions and the app might not work properly. We recommend splitting into smaller batches.
               </p>
             </div>
@@ -549,7 +549,7 @@ export function BatchGenerator() {
         <button
           onClick={handleGenerate}
           disabled={isLoading || parsedPrompts.length === 0}
-          className="w-full bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 disabled:opacity-40 disabled:cursor-not-allowed text-white font-bold py-4 px-6 rounded-xl transition-all duration-200 text-lg shadow-lg shadow-purple-600/20 hover:shadow-purple-600/40"
+          className="w-full bg-champagne hover:bg-champagne-hi text-canvas disabled:opacity-40 disabled:cursor-not-allowed text-bone font-bold py-4 px-6 rounded-xl transition-all duration-200 text-lg shadow-lg shadow-champagne/15 hover:shadow-champagne/30"
         >
           {isLoading
             ? `Generating... (${progress.current}/${progress.total})`
@@ -563,13 +563,13 @@ export function BatchGenerator() {
       {results.length > 0 && (
         <div>
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-xl font-bold text-white">
+            <h3 className="text-xl font-bold text-bone">
               Generated Images ({results.filter((r) => r.status === 'done').length}/{results.length})
             </h3>
             {results.some((r) => r.status === 'done') && (
               <button
                 onClick={downloadAll}
-                className="bg-slate-700 hover:bg-slate-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition border border-slate-600"
+                className="bg-surface-2 hover:bg-surface-2 text-bone px-4 py-2 rounded-lg text-sm font-medium transition border border-border-soft"
               >
                 Download All
               </button>
@@ -579,7 +579,7 @@ export function BatchGenerator() {
             {results.map((result, index) => (
               <div
                 key={index}
-                className="bg-slate-800/80 border border-slate-700 rounded-xl overflow-hidden hover:border-purple-500/50 transition-all group"
+                className="bg-surface/90 border border-border-soft rounded-xl overflow-hidden hover:border-champagne/40 transition-all group"
               >
                 {result.imageUrl && result.status === 'done' ? (
                   <div className="relative">
@@ -588,12 +588,12 @@ export function BatchGenerator() {
                       alt={result.prompt}
                       className="w-full h-52 object-cover"
                     />
-                    <div className="absolute top-2 right-2 bg-green-600/90 text-white px-2 py-1 rounded-md text-xs font-bold backdrop-blur-sm">
+                    <div className="absolute top-2 right-2 bg-success/90 text-bone px-2 py-1 rounded-md text-xs font-bold backdrop-blur-sm">
                       Done
                     </div>
                     <button
                       onClick={() => downloadImage(result.imageUrl!, result.prompt, index)}
-                      className="absolute bottom-2 right-2 bg-slate-900/80 text-white p-2 rounded-lg opacity-0 group-hover:opacity-100 transition backdrop-blur-sm hover:bg-purple-600"
+                      className="absolute bottom-2 right-2 bg-canvas/80 text-bone p-2 rounded-lg opacity-0 group-hover:opacity-100 transition backdrop-blur-sm hover:bg-champagne text-canvas"
                       title="Download"
                     >
                       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -602,34 +602,34 @@ export function BatchGenerator() {
                     </button>
                   </div>
                 ) : result.status === 'pending' ? (
-                  <div className="w-full h-52 bg-slate-700/50 flex items-center justify-center">
-                    <p className="text-gray-500 text-sm">Waiting...</p>
+                  <div className="w-full h-52 bg-surface-2/70 flex items-center justify-center">
+                    <p className="text-taupe text-sm">Waiting...</p>
                   </div>
                 ) : result.status === 'generating' ? (
-                  <div className="w-full h-52 bg-slate-700/50 flex items-center justify-center">
+                  <div className="w-full h-52 bg-surface-2/70 flex items-center justify-center">
                     <div className="text-center">
-                      <div className="w-8 h-8 border-2 border-purple-500 border-t-transparent rounded-full animate-spin mx-auto mb-2" />
-                      <p className="text-gray-400 text-sm">Generating...</p>
+                      <div className="w-8 h-8 border-2 border-champagne border-t-transparent rounded-full animate-spin mx-auto mb-2" />
+                      <p className="text-taupe text-sm">Generating...</p>
                     </div>
                   </div>
                 ) : (
-                  <div className="w-full h-52 bg-red-900/20 flex items-center justify-center border-b border-red-800/30">
+                  <div className="w-full h-52 bg-danger/10 flex items-center justify-center border-b border-danger/30">
                     <div className="text-center px-4">
-                      <p className="text-red-400 font-medium text-sm mb-1">Failed</p>
-                      <p className="text-red-300/70 text-xs">{result.errorMessage}</p>
+                      <p className="text-danger font-medium text-sm mb-1">Failed</p>
+                      <p className="text-danger/80 text-xs">{result.errorMessage}</p>
                     </div>
                   </div>
                 )}
                 <div className="p-3">
-                  <p className="text-gray-300 text-xs line-clamp-2 leading-relaxed">{result.prompt}</p>
+                  <p className="text-bone-muted text-xs line-clamp-2 leading-relaxed">{result.prompt}</p>
                   <div className="flex justify-between items-center mt-2">
-                    <p className="text-purple-400/70 text-xs">
+                    <p className="text-champagne/80 text-xs">
                       ${result.cost.toFixed(4)}
                     </p>
                     <span className={`text-xs px-2 py-0.5 rounded-full ${
-                      result.status === 'done' ? 'bg-green-600/20 text-green-400' :
-                      result.status === 'failed' ? 'bg-red-600/20 text-red-400' :
-                      'bg-yellow-600/20 text-yellow-400'
+                      result.status === 'done' ? 'bg-success/15 text-success' :
+                      result.status === 'failed' ? 'bg-danger/15 text-danger' :
+                      'bg-warning/15 text-warning'
                     }`}>
                       {result.status}
                     </span>

@@ -74,20 +74,20 @@ export function ImageGallery() {
 
   return (
     <div className="space-y-6">
-      <div className="bg-gradient-to-br from-slate-800 to-slate-900 rounded-xl border border-purple-500 p-8">
-        <h2 className="text-3xl font-bold text-white mb-2">Image Gallery</h2>
-        <p className="text-gray-400">
+      <div className="bg-surface rounded-xl border border-champagne p-8">
+        <h2 className="text-3xl font-bold text-bone mb-2">Image Gallery</h2>
+        <p className="text-taupe">
           {pagination?.total || 0} total images
         </p>
       </div>
 
       {isLoading ? (
         <div className="text-center py-12">
-          <p className="text-gray-300 text-lg">Loading images...</p>
+          <p className="text-bone-muted text-lg">Loading images...</p>
         </div>
       ) : images.length === 0 ? (
-        <div className="text-center py-12 bg-slate-800 border border-purple-500 rounded-lg">
-          <p className="text-gray-400 text-lg">No images yet. Generate some!</p>
+        <div className="text-center py-12 bg-surface border border-champagne rounded-lg">
+          <p className="text-taupe text-lg">No images yet. Generate some!</p>
         </div>
       ) : (
         <>
@@ -95,10 +95,10 @@ export function ImageGallery() {
             {images.map((image) => (
               <div
                 key={image.id}
-                className="bg-slate-800 border border-purple-500 rounded-lg overflow-hidden hover:border-blue-500 cursor-pointer transition group"
+                className="bg-surface border border-champagne rounded-lg overflow-hidden hover:border-blue-500 cursor-pointer transition group"
                 onClick={() => setSelectedImage(image)}
               >
-                <div className="relative overflow-hidden bg-slate-700 h-48">
+                <div className="relative overflow-hidden bg-surface-2 h-48">
                   <img
                     src={image.imageUrl}
                     alt={image.prompt}
@@ -106,10 +106,10 @@ export function ImageGallery() {
                   />
                 </div>
                 <div className="p-3">
-                  <p className="text-gray-300 text-xs line-clamp-2">
+                  <p className="text-bone-muted text-xs line-clamp-2">
                     {image.prompt}
                   </p>
-                  <p className="text-purple-400 text-xs mt-2">
+                  <p className="text-champagne text-xs mt-2">
                     {image.model} • ${image.cost.toFixed(4)}
                   </p>
                 </div>
@@ -122,7 +122,7 @@ export function ImageGallery() {
               <button
                 onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
                 disabled={currentPage === 1}
-                className="px-4 py-2 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white rounded-lg transition"
+                className="px-4 py-2 bg-champagne text-canvas hover:bg-champagne-lo disabled:opacity-50 text-bone rounded-lg transition"
               >
                 Previous
               </button>
@@ -133,8 +133,8 @@ export function ImageGallery() {
                     onClick={() => setCurrentPage(i + 1)}
                     className={`px-3 py-2 rounded-lg transition ${
                       currentPage === i + 1
-                        ? 'bg-purple-600 text-white'
-                        : 'bg-slate-800 text-gray-300 hover:bg-slate-700'
+                        ? 'bg-champagne text-canvas text-bone'
+                        : 'bg-surface text-bone-muted hover:bg-surface-2'
                     }`}
                   >
                     {i + 1}
@@ -146,7 +146,7 @@ export function ImageGallery() {
                   setCurrentPage(Math.min(pagination.pages, currentPage + 1))
                 }
                 disabled={currentPage === pagination.pages}
-                className="px-4 py-2 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white rounded-lg transition"
+                className="px-4 py-2 bg-champagne text-canvas hover:bg-champagne-lo disabled:opacity-50 text-bone rounded-lg transition"
               >
                 Next
               </button>
@@ -157,19 +157,19 @@ export function ImageGallery() {
 
       {selectedImage && (
         <div
-          className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center p-4 z-50"
+          className="fixed inset-0 bg-canvas/80 flex items-center justify-center p-4 z-50"
           onClick={() => setSelectedImage(null)}
         >
           <div
-            className="bg-slate-800 border border-purple-500 rounded-lg max-w-2xl w-full max-h-96 overflow-auto"
+            className="bg-surface border border-champagne rounded-lg max-w-2xl w-full max-h-96 overflow-auto"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="p-6 space-y-4">
               <div className="flex justify-between items-start">
-                <h3 className="text-xl font-bold text-white">Image Details</h3>
+                <h3 className="text-xl font-bold text-bone">Image Details</h3>
                 <button
                   onClick={() => setSelectedImage(null)}
-                  className="text-gray-400 hover:text-white transition"
+                  className="text-taupe hover:text-bone transition"
                 >
                   ✕
                 </button>
@@ -182,26 +182,26 @@ export function ImageGallery() {
               />
 
               <div className="space-y-2">
-                <p className="text-gray-300">
-                  <span className="text-gray-400">Prompt:</span> {selectedImage.prompt}
+                <p className="text-bone-muted">
+                  <span className="text-taupe">Prompt:</span> {selectedImage.prompt}
                 </p>
-                <p className="text-gray-300">
-                  <span className="text-gray-400">Model:</span> {selectedImage.model}
+                <p className="text-bone-muted">
+                  <span className="text-taupe">Model:</span> {selectedImage.model}
                 </p>
                 {selectedImage.quality && (
-                  <p className="text-gray-300">
-                    <span className="text-gray-400">Quality:</span> {selectedImage.quality}
+                  <p className="text-bone-muted">
+                    <span className="text-taupe">Quality:</span> {selectedImage.quality}
                   </p>
                 )}
                 {selectedImage.size && (
-                  <p className="text-gray-300">
-                    <span className="text-gray-400">Size:</span> {selectedImage.size}
+                  <p className="text-bone-muted">
+                    <span className="text-taupe">Size:</span> {selectedImage.size}
                   </p>
                 )}
-                <p className="text-gray-300">
-                  <span className="text-gray-400">Cost:</span> ${selectedImage.cost.toFixed(4)}
+                <p className="text-bone-muted">
+                  <span className="text-taupe">Cost:</span> ${selectedImage.cost.toFixed(4)}
                 </p>
-                <p className="text-gray-400 text-sm">
+                <p className="text-taupe text-sm">
                   {new Date(selectedImage.createdAt).toLocaleString()}
                 </p>
               </div>
@@ -210,7 +210,7 @@ export function ImageGallery() {
                 onClick={() =>
                   handleDownload(selectedImage.imageUrl, selectedImage.prompt)
                 }
-                className="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-lg transition"
+                className="w-full bg-champagne text-canvas hover:bg-champagne-lo text-bone font-bold py-2 px-4 rounded-lg transition"
               >
                 Download Image
               </button>

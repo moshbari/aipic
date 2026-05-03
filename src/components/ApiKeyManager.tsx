@@ -109,23 +109,23 @@ export function ApiKeyManager() {
 
   return (
     <div className="space-y-6">
-      <div className="bg-gradient-to-br from-slate-800 to-slate-900 rounded-xl border border-purple-500 p-8">
-        <h2 className="text-3xl font-bold text-white mb-2">API Keys</h2>
-        <p className="text-gray-400">Manage your API keys securely</p>
+      <div className="bg-surface rounded-xl border border-champagne p-8">
+        <h2 className="text-3xl font-bold text-bone mb-2">API Keys</h2>
+        <p className="text-taupe">Manage your API keys securely</p>
       </div>
 
       <button
         onClick={() => setShowAddForm(!showAddForm)}
-        className="bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-lg transition"
+        className="bg-champagne text-canvas hover:bg-champagne-lo text-bone font-bold py-2 px-4 rounded-lg transition"
       >
         {showAddForm ? 'Cancel' : 'Add API Key'}
       </button>
 
       {showAddForm && (
-        <div className="bg-slate-800 border border-purple-500 rounded-lg p-6">
+        <div className="bg-surface border border-champagne rounded-lg p-6">
           <form onSubmit={handleAddKey} className="space-y-4">
             <div>
-              <label className="block text-gray-300 font-medium mb-2">
+              <label className="block text-bone-muted font-medium mb-2">
                 Provider
               </label>
               <select
@@ -133,14 +133,14 @@ export function ApiKeyManager() {
                 onChange={(e) =>
                   setFormData({ ...formData, provider: e.target.value })
                 }
-                className="w-full bg-slate-700 border border-purple-500 rounded-lg px-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-purple-600"
+                className="w-full bg-surface-2 border border-champagne rounded-lg px-4 py-2 text-bone focus:outline-none focus:ring-2 focus:ring-champagne"
               >
                 <option value="OPENAI">OpenAI</option>
               </select>
             </div>
 
             <div>
-              <label className="block text-gray-300 font-medium mb-2">
+              <label className="block text-bone-muted font-medium mb-2">
                 Key Name
               </label>
               <input
@@ -150,12 +150,12 @@ export function ApiKeyManager() {
                   setFormData({ ...formData, name: e.target.value })
                 }
                 placeholder="e.g., Production Key"
-                className="w-full bg-slate-700 border border-purple-500 rounded-lg px-4 py-2 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-600"
+                className="w-full bg-surface-2 border border-champagne rounded-lg px-4 py-2 text-bone placeholder-taupe focus:outline-none focus:ring-2 focus:ring-champagne"
               />
             </div>
 
             <div>
-              <label className="block text-gray-300 font-medium mb-2">
+              <label className="block text-bone-muted font-medium mb-2">
                 API Key
               </label>
               <input
@@ -165,13 +165,13 @@ export function ApiKeyManager() {
                   setFormData({ ...formData, apiKey: e.target.value })
                 }
                 placeholder="sk-..."
-                className="w-full bg-slate-700 border border-purple-500 rounded-lg px-4 py-2 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-600"
+                className="w-full bg-surface-2 border border-champagne rounded-lg px-4 py-2 text-bone placeholder-taupe focus:outline-none focus:ring-2 focus:ring-champagne"
               />
             </div>
 
             <button
               type="submit"
-              className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-lg transition"
+              className="w-full bg-success hover:bg-success/90 text-bone font-bold py-2 px-4 rounded-lg transition"
             >
               Add Key
             </button>
@@ -180,48 +180,48 @@ export function ApiKeyManager() {
       )}
 
       {isLoading ? (
-        <p className="text-gray-300">Loading...</p>
+        <p className="text-bone-muted">Loading...</p>
       ) : apiKeys.length === 0 ? (
-        <div className="bg-slate-800 border border-purple-500 rounded-lg p-6 text-center">
-          <p className="text-gray-400">No API keys yet. Add one to get started!</p>
+        <div className="bg-surface border border-champagne rounded-lg p-6 text-center">
+          <p className="text-taupe">No API keys yet. Add one to get started!</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {apiKeys.map((key) => (
             <div
               key={key.id}
-              className="bg-slate-800 border border-purple-500 rounded-lg p-4"
+              className="bg-surface border border-champagne rounded-lg p-4"
             >
               <div className="flex justify-between items-start mb-2">
                 <div>
-                  <p className="font-bold text-white">{key.name}</p>
-                  <p className="text-gray-400 text-sm">{key.provider}</p>
+                  <p className="font-bold text-bone">{key.name}</p>
+                  <p className="text-taupe text-sm">{key.provider}</p>
                 </div>
                 <span
                   className={`px-2 py-1 rounded text-xs font-bold ${
                     key.isActive
-                      ? 'bg-green-600 text-white'
-                      : 'bg-gray-600 text-gray-300'
+                      ? 'bg-success text-bone'
+                      : 'bg-surface-2 text-taupe border border-border-soft'
                   }`}
                 >
                   {key.isActive ? 'Active' : 'Inactive'}
                 </span>
               </div>
 
-              <p className="text-gray-400 text-xs mb-4">
+              <p className="text-taupe text-xs mb-4">
                 Added {new Date(key.createdAt).toLocaleDateString()}
               </p>
 
               <div className="flex gap-2">
                 <button
                   onClick={() => handleToggleKey(key.id, key.isActive)}
-                  className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-3 rounded text-sm transition"
+                  className="flex-1 bg-surface-2 hover:bg-surface-2/80 border border-champagne/40 text-bone text-bone font-bold py-2 px-3 rounded text-sm transition"
                 >
                   {key.isActive ? 'Disable' : 'Enable'}
                 </button>
                 <button
                   onClick={() => handleDeleteKey(key.id)}
-                  className="flex-1 bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-3 rounded text-sm transition"
+                  className="flex-1 bg-danger hover:bg-danger/90 text-bone font-bold py-2 px-3 rounded text-sm transition"
                 >
                   Delete
                 </button>

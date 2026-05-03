@@ -17,8 +17,8 @@ export default function Home() {
 
   if (status === 'loading') {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center">
-        <p className="text-gray-300 text-lg">Loading...</p>
+      <div className="min-h-screen bg-canvas flex items-center justify-center">
+        <p className="text-bone-muted text-lg">Loading...</p>
       </div>
     );
   }
