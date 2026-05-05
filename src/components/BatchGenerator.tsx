@@ -38,6 +38,52 @@ function detectSizeFromPrompt(prompt: string): string | null {
   return null;
 }
 
+/**
+ * Extract a meaningful filename from a prompt. Detects:
+ *   "1. Title", "1) Title", "Prompt #1 — Title", "Image #1 - Title"
+ * and produces "01 — Title". Falls back to the first 40 chars
+ * of the prompt body if no header is found.
+ */
+function extractFilename(promptText: string, fallbackIndex: number): string {
+  const trimmed = promptText.trim();
+
+  // Sanitise a title for safe filenames (Win/macOS/Linux).
+  const sanitiseTitle = (raw: string) =>
+    raw
+      .split(/[.\n]/)[0]
+      .replace(/[<>:"/\\|?*\x00-\x1f]/g, '')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .substring(0, 80);
+
+  // Pattern A: "Prompt #1 — Title" or "Image #2 - Title"
+  const headerMatch = trimmed.match(
+    /^(?:Prompt|Image)\s*#?\s*(\d+)\s*[—–\-:.]\s*([^\n]+)/i
+  );
+  if (headerMatch) {
+    const num = headerMatch[1].padStart(2, '0');
+    const title = sanitiseTitle(headerMatch[2]);
+    if (title) return `${num} — ${title}`;
+  }
+
+  // Pattern B: "1. Title" or "1) Title" on the first line
+  const numberedMatch = trimmed.match(/^(\d+)[\.\)]\s+([^\n]+)/);
+  if (numberedMatch) {
+    const num = numberedMatch[1].padStart(2, '0');
+    const title = sanitiseTitle(numberedMatch[2]);
+    if (title) return `${num} — ${title}`;
+  }
+
+  // Fallback: first 40 alphanumeric chars of the prompt body
+  const fallback = trimmed
+    .replace(/[^a-zA-Z0-9\s]/g, '')
+    .trim()
+    .substring(0, 40)
+    .trim()
+    .replace(/\s+/g, '-');
+  return `${fallback}-${fallbackIndex + 1}`;
+}
+
 interface GenerationResult {
   id?: string;
   prompt: string;
@@ -203,14 +249,7 @@ export function BatchGenerator() {
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      // Create a clean filename from the first ~40 chars of the prompt
-      const cleanName = promptText
-        .replace(/[^a-zA-Z0-9\s]/g, '')
-        .trim()
-        .substring(0, 40)
-        .trim()
-        .replace(/\s+/g, '-');
-      a.download = `${cleanName}-${index + 1}.png`;
+      a.download = `${extractFilename(promptText, index)}.png`;
       document.body.appendChild(a);
       a.click();
       window.URL.revokeObjectURL(url);
@@ -449,7 +488,35 @@ export function BatchGenerator() {
           <textarea
             value={rawText}
             onChange={(e) => setRawText(e.target.value)}
-            placeholder={`Paste all your prompts here...\n\nExample with double line breaks:\n\nA beautiful sunset over mountains with golden light...\n\nA futuristic city skyline at night with neon lights...\n\nA serene Japanese garden with cherry blossoms...`}
+            placeholder={`HOW TO FORMAT YOUR PROMPTS
+============================
+
+Use this exact pattern for every image:
+
+  <serial>. <Title Of The Image>
+  <your full prompt on the very next line>
+
+Rules:
+  • Press Enter ONCE between the title and the prompt.
+  • Do NOT press Enter twice inside a single prompt — keep the prompt as one paragraph.
+  • Press Enter TWICE only to separate one image from the next.
+
+────────  EXAMPLE  ────────
+
+1. The Golden Sunset
+A serene mountain lake at golden hour with snow-capped peaks reflected in the still water, cinematic lighting, ultra-detailed, 1536x1024.
+
+2. Neon Tokyo Night
+A futuristic Tokyo street at night drenched in neon, rain-soaked pavement, cyberpunk mood, photorealistic, 1024x1536.
+
+3. Cherry Blossom Garden
+A serene Japanese garden in full bloom with a koi pond and stone lantern, soft morning light, painterly style, 1024x1024.
+
+────────────────────────────
+
+Tip: Screenshot these instructions and paste them into ChatGPT or Claude — they will format your batch in this exact structure automatically.
+
+Each image will download as:  01 — The Golden Sunset.png, 02 — Neon Tokyo Night.png, ...`}
             className="w-full h-56 bg-surface-2/80 border border-border-soft rounded-xl px-4 py-3 text-bone placeholder-taupe focus:outline-none focus:ring-2 focus:ring-champagne focus:border-transparent font-mono text-sm leading-relaxed resize-y"
           />
         </div>
