@@ -84,6 +84,21 @@ function extractFilename(promptText: string, fallbackIndex: number): string {
   return `${fallback}-${fallbackIndex + 1}`;
 }
 
+/**
+ * Extract a short, human-readable title for an image:
+ * the first 5 words of the prompt (after stripping any leading
+ * number prefix like "1." or "Prompt #1 —").
+ */
+function extractTitle(promptText: string): string {
+  let trimmed = promptText.trim();
+  // Strip "Prompt #N — " or "Image #N - " style headers
+  trimmed = trimmed.replace(/^(?:Prompt|Image)\s*#?\s*\d+\s*[—–\-:.]\s*/i, "");
+  // Strip leading "N." or "N)" numeric prefix
+  trimmed = trimmed.replace(/^\d+[\.\)]\s*/, "");
+  const words = trimmed.split(/\s+/).filter(Boolean).slice(0, 5);
+  return words.join(" ") || "Untitled";
+}
+
 interface GenerationResult {
   id?: string;
   prompt: string;
@@ -199,6 +214,8 @@ export function BatchGenerator() {
   const [progress, setProgress] = useState({ current: 0, total: 0 });
   const [showPreview, setShowPreview] = useState(true);
   const [autoDownload, setAutoDownload] = useState(true);
+  const [selectedIndices, setSelectedIndices] = useState<Set<number>>(new Set());
+  const [copiedKey, setCopiedKey] = useState<string | null>(null);
 
   // Parse prompts based on selected separator
   const parsedPrompts = useMemo(
@@ -259,6 +276,84 @@ export function BatchGenerator() {
     }
   }, []);
 
+
+  const showCopiedBadge = (key: string) => {
+    setCopiedKey(key);
+    setTimeout(() => {
+      setCopiedKey((prev) => (prev === key ? null : prev));
+    }, 1500);
+  };
+
+  const copyToClipboard = useCallback(async (text: string, key: string) => {
+    try {
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(text);
+      } else {
+        const ta = document.createElement("textarea");
+        ta.value = text;
+        ta.style.position = "fixed";
+        ta.style.opacity = "0";
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand("copy");
+        document.body.removeChild(ta);
+      }
+      showCopiedBadge(key);
+    } catch (err) {
+      console.error("Copy failed:", err);
+      alert("Copy failed. Please copy manually.");
+    }
+  }, []);
+
+  const copySingleImage = useCallback(
+    (result: GenerationResult) => {
+      if (!result.imageUrl) return;
+      const title = extractTitle(result.prompt);
+      const text = `${title}\n${result.imageUrl}`;
+      copyToClipboard(text, `single-${title}-${result.imageUrl}`);
+    },
+    [copyToClipboard]
+  );
+
+  const toggleSelected = useCallback((index: number) => {
+    setSelectedIndices((prev) => {
+      const next = new Set(prev);
+      if (next.has(index)) next.delete(index);
+      else next.add(index);
+      return next;
+    });
+  }, []);
+
+  const selectAllDone = useCallback(() => {
+    setSelectedIndices((prev) => {
+      const next = new Set(prev);
+      results.forEach((r, i) => {
+        if (r.status === "done" && r.imageUrl) next.add(i);
+      });
+      return next;
+    });
+  }, [results]);
+
+  const clearSelection = useCallback(() => {
+    setSelectedIndices(new Set());
+  }, []);
+
+  const copySelected = useCallback(() => {
+    const ordered = Array.from(selectedIndices)
+      .sort((a, b) => a - b)
+      .map((i) => results[i])
+      .filter((r): r is GenerationResult => !!r && !!r.imageUrl && r.status === "done");
+
+    if (ordered.length === 0) {
+      alert("Select at least one finished image first.");
+      return;
+    }
+    const text = ordered
+      .map((r) => `${extractTitle(r.prompt)}\n${r.imageUrl}`)
+      .join("\n\n");
+    copyToClipboard(text, "multi");
+  }, [selectedIndices, results, copyToClipboard]);
+
   const handleGenerate = async () => {
     if (parsedPrompts.length === 0) {
       alert('Please enter at least one prompt');
@@ -267,6 +362,7 @@ export function BatchGenerator() {
 
     setIsLoading(true);
     setProgress({ current: 0, total: parsedPrompts.length });
+    setSelectedIndices(new Set());
     setResults(
       parsedPrompts.map((p) => ({
         prompt: p,
@@ -629,32 +725,92 @@ Each image will download as:  01 — The Golden Sunset.png, 02 — Neon Tokyo Ni
       {/* Results Grid */}
       {results.length > 0 && (
         <div>
-          <div className="flex items-center justify-between mb-4">
+          <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
             <h3 className="text-xl font-bold text-bone">
               Generated Images ({results.filter((r) => r.status === 'done').length}/{results.length})
+              {selectedIndices.size > 0 && (
+                <span className="text-champagne text-sm font-medium ml-2">
+                  · {selectedIndices.size} selected
+                </span>
+              )}
             </h3>
             {results.some((r) => r.status === 'done') && (
-              <button
-                onClick={downloadAll}
-                className="bg-surface-2 hover:bg-surface-2 text-bone px-4 py-2 rounded-lg text-sm font-medium transition border border-border-soft"
-              >
-                Download All
-              </button>
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  onClick={selectAllDone}
+                  className="bg-surface-2 hover:bg-surface-2 text-bone-muted hover:text-bone px-3 py-2 rounded-lg text-xs font-medium transition border border-border-soft"
+                >
+                  Select All
+                </button>
+                {selectedIndices.size > 0 && (
+                  <button
+                    onClick={clearSelection}
+                    className="bg-surface-2 hover:bg-surface-2 text-bone-muted hover:text-bone px-3 py-2 rounded-lg text-xs font-medium transition border border-border-soft"
+                  >
+                    Clear
+                  </button>
+                )}
+                <button
+                  onClick={copySelected}
+                  disabled={selectedIndices.size === 0}
+                  className="bg-champagne hover:bg-champagne-hi text-canvas disabled:opacity-40 disabled:cursor-not-allowed text-bone px-4 py-2 rounded-lg text-sm font-bold transition flex items-center gap-2"
+                  title="Copy titles + links of selected images"
+                >
+                  {copiedKey === 'multi' ? (
+                    <>
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
+                      Copied {selectedIndices.size}!
+                    </>
+                  ) : (
+                    <>
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
+                      Copy Selected ({selectedIndices.size})
+                    </>
+                  )}
+                </button>
+                <button
+                  onClick={downloadAll}
+                  className="bg-surface-2 hover:bg-surface-2 text-bone px-4 py-2 rounded-lg text-sm font-medium transition border border-border-soft"
+                >
+                  Download All
+                </button>
+              </div>
             )}
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {results.map((result, index) => (
+            {results.map((result, index) => {
+              const title = extractTitle(result.prompt);
+              const isSelected = selectedIndices.has(index);
+              const isDone = result.status === 'done' && !!result.imageUrl;
+              const singleCopyKey = `single-${title}-${result.imageUrl}`;
+              return (
               <div
                 key={index}
-                className="bg-surface/90 border border-border-soft rounded-xl overflow-hidden hover:border-champagne/40 transition-all group"
+                className={`bg-surface/90 border rounded-xl overflow-hidden transition-all group ${
+                  isSelected
+                    ? 'border-champagne ring-2 ring-champagne/40'
+                    : 'border-border-soft hover:border-champagne/40'
+                }`}
               >
-                {result.imageUrl && result.status === 'done' ? (
+                {isDone ? (
                   <div className="relative">
                     <img
                       src={result.imageUrl}
                       alt={result.prompt}
                       className="w-full h-52 object-cover"
                     />
+                    <label
+                      className="absolute top-2 left-2 flex items-center gap-1.5 bg-canvas/80 backdrop-blur-sm rounded-md px-2 py-1 cursor-pointer select-none"
+                      title="Select this image"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={() => toggleSelected(index)}
+                        className="w-4 h-4 rounded border-border-soft text-champagne focus:ring-champagne bg-surface-2"
+                      />
+                      <span className="text-[11px] text-bone font-medium">Select</span>
+                    </label>
                     <div className="absolute top-2 right-2 bg-success/90 text-bone px-2 py-1 rounded-md text-xs font-bold backdrop-blur-sm">
                       Done
                     </div>
@@ -688,7 +844,10 @@ Each image will download as:  01 — The Golden Sunset.png, 02 — Neon Tokyo Ni
                   </div>
                 )}
                 <div className="p-3">
-                  <p className="text-bone-muted text-xs line-clamp-2 leading-relaxed">{result.prompt}</p>
+                  <p className="text-bone font-semibold text-sm leading-snug line-clamp-1" title={title}>
+                    {title}
+                  </p>
+                  <p className="text-bone-muted text-xs line-clamp-2 leading-relaxed mt-1">{result.prompt}</p>
                   <div className="flex justify-between items-center mt-2">
                     <p className="text-champagne/80 text-xs">
                       ${result.cost.toFixed(4)}
@@ -701,9 +860,29 @@ Each image will download as:  01 — The Golden Sunset.png, 02 — Neon Tokyo Ni
                       {result.status}
                     </span>
                   </div>
+                  {isDone && (
+                    <button
+                      onClick={() => copySingleImage(result)}
+                      className="mt-2 w-full bg-surface-2 hover:bg-champagne hover:text-canvas text-bone-muted border border-border-soft rounded-lg px-3 py-1.5 text-xs font-semibold transition flex items-center justify-center gap-1.5"
+                      title="Copy title + link"
+                    >
+                      {copiedKey === singleCopyKey ? (
+                        <>
+                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
+                          Copied!
+                        </>
+                      ) : (
+                        <>
+                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
+                          Copy title + link
+                        </>
+                      )}
+                    </button>
+                  )}
                 </div>
               </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}
