@@ -24,6 +24,40 @@ interface PaginationData {
   pages: number;
 }
 
+/**
+ * Extract a short, human-readable title for an image:
+ * the first 5 words of the prompt (after stripping any leading
+ * number prefix like "1." or "Prompt #1 —").
+ */
+function extractTitle(promptText: string): string {
+  let trimmed = promptText.trim();
+  trimmed = trimmed.replace(/^(?:Prompt|Image)\s*#?\s*\d+\s*[—–\-:.]\s*/i, "");
+  trimmed = trimmed.replace(/^\d+[\.\)]\s*/, "");
+  const words = trimmed.split(/\s+/).filter(Boolean).slice(0, 5);
+  return words.join(" ") || "Untitled";
+}
+
+async function copyTextToClipboard(text: string): Promise<boolean> {
+  try {
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(text);
+    } else {
+      const ta = document.createElement("textarea");
+      ta.value = text;
+      ta.style.position = "fixed";
+      ta.style.opacity = "0";
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand("copy");
+      document.body.removeChild(ta);
+    }
+    return true;
+  } catch (err) {
+    console.error("Copy failed:", err);
+    return false;
+  }
+}
+
 export function ImageGallery() {
   const { data: session } = useSession();
   const [images, setImages] = useState<ImageItem[]>([]);
@@ -31,6 +65,8 @@ export function ImageGallery() {
   const [currentPage, setCurrentPage] = useState(1);
   const [isLoading, setIsLoading] = useState(false);
   const [selectedImage, setSelectedImage] = useState<ImageItem | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [copiedKey, setCopiedKey] = useState<string | null>(null);
 
   const fetchImages = async (page: number) => {
     if (!session?.user?.id) return;
@@ -52,6 +88,7 @@ export function ImageGallery() {
 
   useEffect(() => {
     fetchImages(currentPage);
+    setSelectedIds(new Set());
   }, [currentPage]);
 
   const handleDownload = async (imageUrl: string, prompt: string) => {
@@ -70,6 +107,54 @@ export function ImageGallery() {
       console.error('Download error:', error);
       alert('Failed to download image');
     }
+  };
+
+
+  const flashCopied = (key: string) => {
+    setCopiedKey(key);
+    setTimeout(() => {
+      setCopiedKey((prev) => (prev === key ? null : prev));
+    }, 1500);
+  };
+
+  const toggleSelected = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const selectAllOnPage = () => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      images.forEach((img) => next.add(img.id));
+      return next;
+    });
+  };
+
+  const clearSelection = () => setSelectedIds(new Set());
+
+  const copySingle = async (image: ImageItem) => {
+    const text = `${extractTitle(image.prompt)}\n${image.imageUrl}`;
+    const ok = await copyTextToClipboard(text);
+    if (ok) flashCopied(`single-${image.id}`);
+    else alert("Copy failed. Please try again.");
+  };
+
+  const copySelected = async () => {
+    const ordered = images.filter((img) => selectedIds.has(img.id));
+    if (ordered.length === 0) {
+      alert("Select at least one image first.");
+      return;
+    }
+    const text = ordered
+      .map((img) => `${extractTitle(img.prompt)}\n${img.imageUrl}`)
+      .join("\n\n");
+    const ok = await copyTextToClipboard(text);
+    if (ok) flashCopied("multi");
+    else alert("Copy failed. Please try again.");
   };
 
   return (
@@ -91,30 +176,120 @@ export function ImageGallery() {
         </div>
       ) : (
         <>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-            {images.map((image) => (
-              <div
-                key={image.id}
-                className="bg-surface border border-champagne rounded-lg overflow-hidden hover:border-blue-500 cursor-pointer transition group"
-                onClick={() => setSelectedImage(image)}
+          <div className="flex flex-wrap items-center justify-between gap-3 mb-2">
+            <div className="text-sm text-taupe">
+              {selectedIds.size > 0 ? (
+                <span className="text-champagne font-medium">{selectedIds.size} selected</span>
+              ) : (
+                <span>Tip: select images to copy their titles + links</span>
+              )}
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                onClick={selectAllOnPage}
+                className="bg-surface-2 hover:bg-surface-2 text-bone-muted hover:text-bone px-3 py-2 rounded-lg text-xs font-medium transition border border-border-soft"
               >
-                <div className="relative overflow-hidden bg-surface-2 h-48">
-                  <img
-                    src={image.imageUrl}
-                    alt={image.prompt}
-                    className="w-full h-full object-cover group-hover:scale-105 transition"
-                  />
+                Select All on Page
+              </button>
+              {selectedIds.size > 0 && (
+                <button
+                  onClick={clearSelection}
+                  className="bg-surface-2 hover:bg-surface-2 text-bone-muted hover:text-bone px-3 py-2 rounded-lg text-xs font-medium transition border border-border-soft"
+                >
+                  Clear
+                </button>
+              )}
+              <button
+                onClick={copySelected}
+                disabled={selectedIds.size === 0}
+                className="bg-champagne hover:bg-champagne-hi text-canvas disabled:opacity-40 disabled:cursor-not-allowed text-bone px-4 py-2 rounded-lg text-sm font-bold transition flex items-center gap-2"
+                title="Copy titles + links of selected images"
+              >
+                {copiedKey === 'multi' ? (
+                  <>
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
+                    Copied {selectedIds.size}!
+                  </>
+                ) : (
+                  <>
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
+                    Copy Selected ({selectedIds.size})
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+            {images.map((image) => {
+              const title = extractTitle(image.prompt);
+              const isSelected = selectedIds.has(image.id);
+              const singleKey = `single-${image.id}`;
+              return (
+                <div
+                  key={image.id}
+                  className={`bg-surface border rounded-lg overflow-hidden transition group ${
+                    isSelected
+                      ? 'border-champagne ring-2 ring-champagne/40'
+                      : 'border-champagne hover:border-blue-500'
+                  }`}
+                >
+                  <div
+                    className="relative overflow-hidden bg-surface-2 h-48 cursor-pointer"
+                    onClick={() => setSelectedImage(image)}
+                  >
+                    <img
+                      src={image.imageUrl}
+                      alt={image.prompt}
+                      className="w-full h-full object-cover group-hover:scale-105 transition"
+                    />
+                    <label
+                      className="absolute top-2 left-2 flex items-center gap-1.5 bg-canvas/80 backdrop-blur-sm rounded-md px-2 py-1 cursor-pointer select-none"
+                      onClick={(e) => e.stopPropagation()}
+                      title="Select this image"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={() => toggleSelected(image.id)}
+                        className="w-4 h-4 rounded border-border-soft text-champagne focus:ring-champagne bg-surface-2"
+                      />
+                      <span className="text-[11px] text-bone font-medium">Select</span>
+                    </label>
+                  </div>
+                  <div className="p-3">
+                    <p className="text-bone font-semibold text-sm leading-snug line-clamp-1" title={title}>
+                      {title}
+                    </p>
+                    <p className="text-bone-muted text-xs line-clamp-2 mt-1">
+                      {image.prompt}
+                    </p>
+                    <p className="text-champagne text-xs mt-2">
+                      {image.model} • ${image.cost.toFixed(4)}
+                    </p>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        copySingle(image);
+                      }}
+                      className="mt-2 w-full bg-surface-2 hover:bg-champagne hover:text-canvas text-bone-muted border border-border-soft rounded-lg px-3 py-1.5 text-xs font-semibold transition flex items-center justify-center gap-1.5"
+                      title="Copy title + link"
+                    >
+                      {copiedKey === singleKey ? (
+                        <>
+                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
+                          Copied!
+                        </>
+                      ) : (
+                        <>
+                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
+                          Copy title + link
+                        </>
+                      )}
+                    </button>
+                  </div>
                 </div>
-                <div className="p-3">
-                  <p className="text-bone-muted text-xs line-clamp-2">
-                    {image.prompt}
-                  </p>
-                  <p className="text-champagne text-xs mt-2">
-                    {image.model} • ${image.cost.toFixed(4)}
-                  </p>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
 
           {pagination && pagination.pages > 1 && (
