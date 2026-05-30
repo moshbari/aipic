@@ -12,9 +12,28 @@ export const maxDuration = 300; // 5 minute timeout for large batches
 
 export async function POST(request: NextRequest) {
   try {
-    const session = await getServerSession(authOptions);
+    // Auth: a browser session OR a service token (for trusted backends like the
+    // Book Robot Factory). The service token runs as the configured owner, so it
+    // uses that owner's stored OpenAI key. Inert unless AIPIC_SERVICE_TOKEN is set.
+    let userId: string | undefined;
+    const authHeader = request.headers.get('authorization') || '';
+    if (
+      process.env.AIPIC_SERVICE_TOKEN &&
+      authHeader === `Bearer ${process.env.AIPIC_SERVICE_TOKEN}`
+    ) {
+      const owner = await prisma.user.findFirst({
+        where: process.env.AIPIC_SERVICE_USER_EMAIL
+          ? { email: process.env.AIPIC_SERVICE_USER_EMAIL }
+          : undefined,
+        orderBy: { createdAt: 'asc' },
+      });
+      userId = owner?.id;
+    } else {
+      const session = await getServerSession(authOptions);
+      userId = session?.user?.id;
+    }
 
-    if (!session?.user?.id) {
+    if (!userId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
@@ -37,7 +56,7 @@ export async function POST(request: NextRequest) {
     // Get the user's active OpenAI API key
     const apiKeys = await prisma.apiKey.findMany({
       where: {
-        userId: session.user.id,
+        userId,
         provider: 'OPENAI',
         isActive: true,
       },
@@ -70,7 +89,7 @@ export async function POST(request: NextRequest) {
           quality,
           size,
           batchId,
-          userId: session.user.id,
+          userId,
           index: i + batchIndex,
         })
       );
