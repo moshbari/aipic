@@ -4,6 +4,11 @@ import { useState, useMemo, useCallback } from 'react';
 import { useSession } from 'next-auth/react';
 import { MODELS, calculateCost, getModelSizes, getModelQualities, getCostSummary, formatPrice } from '@/lib/models';
 
+// Big batches are split into groups this size and sent one group at a time.
+// Keeps every request comfortably inside the server's 5 minute limit, so the
+// user can paste 50 prompts and walk away.
+const GROUP_SIZE = 10;
+
 // Client-side mirror of the server's smart dimension detection
 function detectSizeFromPrompt(prompt: string): string | null {
   const lower = prompt.toLowerCase();
@@ -206,12 +211,13 @@ export function BatchGenerator() {
   const [rawText, setRawText] = useState('');
   const [separator, setSeparator] = useState<SeparatorType>('double-newline');
   const [customSeparator, setCustomSeparator] = useState('');
-  const [selectedModel, setSelectedModel] = useState('gpt-image-1.5');
+  const [selectedModel, setSelectedModel] = useState('gpt-image-2');
   const [quality, setQuality] = useState('medium');
   const [size, setSize] = useState('1024x1024');
   const [isLoading, setIsLoading] = useState(false);
   const [results, setResults] = useState<GenerationResult[]>([]);
   const [progress, setProgress] = useState({ current: 0, total: 0 });
+  const [groupProgress, setGroupProgress] = useState({ current: 0, total: 0 });
   const [showPreview, setShowPreview] = useState(true);
   const [autoDownload, setAutoDownload] = useState(true);
   const [selectedIndices, setSelectedIndices] = useState<Set<number>>(new Set());
@@ -360,9 +366,16 @@ export function BatchGenerator() {
       return;
     }
 
+    // Split into groups of GROUP_SIZE and run them back to back
+    const groups: { prompts: string[]; offset: number }[] = [];
+    for (let i = 0; i < parsedPrompts.length; i += GROUP_SIZE) {
+      groups.push({ prompts: parsedPrompts.slice(i, i + GROUP_SIZE), offset: i });
+    }
+
     setIsLoading(true);
     setProgress({ current: 0, total: parsedPrompts.length });
     setSelectedIndices(new Set());
+    setGroupProgress({ current: 1, total: groups.length });
     setResults(
       parsedPrompts.map((p) => ({
         prompt: p,
@@ -371,46 +384,97 @@ export function BatchGenerator() {
       }))
     );
 
-    try {
-      const response = await fetch('/api/generate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          prompts: parsedPrompts,
-          model: selectedModel,
-          quality: quality || undefined,
-          size,
-        }),
+    let processed = 0;
+
+    for (let g = 0; g < groups.length; g++) {
+      const group = groups[g];
+      setGroupProgress({ current: g + 1, total: groups.length });
+
+      // Mark this group as in-flight so the user can see where we are
+      setResults((prev) => {
+        const next = [...prev];
+        group.prompts.forEach((p, i) => {
+          next[group.offset + i] = { ...next[group.offset + i], status: 'generating' };
+        });
+        return next;
       });
 
-      if (!response.ok) {
-        const error = await response.json();
-        alert(`Error: ${error.error}`);
-        setIsLoading(false);
-        return;
+      let groupResults: GenerationResult[] | null = null;
+
+      try {
+        const response = await fetch('/api/generate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            prompts: group.prompts,
+            model: selectedModel,
+            quality: quality || undefined,
+            size,
+          }),
+        });
+
+        if (!response.ok) {
+          const error = await response.json().catch(() => ({ error: 'Request failed' }));
+
+          // A rejected key or bad setup will fail every remaining group too —
+          // stop now instead of burning through the rest.
+          if (response.status === 400 || response.status === 401) {
+            alert(`Error: ${error.error}`);
+            setResults((prev) => {
+              const next = [...prev];
+              for (let i = group.offset; i < next.length; i++) {
+                if (next[i].status === 'pending' || next[i].status === 'generating') {
+                  next[i] = { ...next[i], status: 'failed', errorMessage: error.error };
+                }
+              }
+              return next;
+            });
+            setIsLoading(false);
+            return;
+          }
+
+          throw new Error(error.error || 'Group failed');
+        }
+
+        const data = await response.json();
+        groupResults = data.results as GenerationResult[];
+      } catch (error: any) {
+        // This group broke — record it and carry on with the next one so a
+        // single hiccup doesn't throw away a 50 image run.
+        console.error(`Group ${g + 1} error:`, error);
+        groupResults = group.prompts.map((p) => ({
+          prompt: p,
+          status: 'failed' as const,
+          errorMessage: error?.message || 'Generation failed',
+          cost: costPerImage,
+        }));
       }
 
-      const data = await response.json();
-      setResults(data.results);
-      setProgress({ current: data.successCount, total: data.totalPrompts });
+      setResults((prev) => {
+        const next = [...prev];
+        groupResults!.forEach((r, i) => {
+          next[group.offset + i] = r;
+        });
+        return next;
+      });
 
-      // Auto-download all successful images
+      processed += group.prompts.length;
+      setProgress({ current: processed, total: parsedPrompts.length });
+
+      // Download this group's images now rather than waiting for every group
       if (autoDownload) {
-        for (let i = 0; i < data.results.length; i++) {
-          const result = data.results[i];
+        for (let i = 0; i < groupResults.length; i++) {
+          const result = groupResults[i];
           if (result.imageUrl && result.status === 'done') {
-            await downloadImage(result.imageUrl, result.prompt, i);
+            await downloadImage(result.imageUrl, result.prompt, group.offset + i);
             // Small delay between downloads so browser doesn't block them
             await new Promise((resolve) => setTimeout(resolve, 300));
           }
         }
       }
-    } catch (error) {
-      console.error('Generation error:', error);
-      alert('Failed to generate images. Check your API key and try again.');
-    } finally {
-      setIsLoading(false);
     }
+
+    setIsLoading(false);
   };
 
   const downloadAll = async () => {
@@ -550,7 +614,10 @@ export function BatchGenerator() {
         {/* Usage Tip */}
         <div className="mb-3 bg-champagne/10 border border-champagne/30 rounded-lg px-4 py-3">
           <p className="text-bone font-bold text-base leading-snug">
-            For best results, please keep your batch under 10 prompts at a time.
+            Paste as many prompts as you like — we run them in groups of {GROUP_SIZE} automatically.
+          </p>
+          <p className="text-bone-muted text-xs mt-1 leading-relaxed">
+            Nothing for you to split up. Hit generate once and leave it running.
           </p>
         </div>
 
@@ -675,6 +742,11 @@ Each image will download as:  01 — The Golden Sunset.png, 02 — Neon Tokyo Ni
             <div className="flex justify-between items-center mb-2">
               <p className="text-bone-muted text-sm">
                 Generating: {progress.current}/{progress.total}
+                {groupProgress.total > 1 && (
+                  <span className="text-taupe">
+                    {' '}— group {groupProgress.current} of {groupProgress.total}
+                  </span>
+                )}
               </p>
               <p className="text-champagne text-sm font-medium">
                 {Math.round((progress.current / progress.total) * 100)}%
@@ -691,18 +763,18 @@ Each image will download as:  01 — The Golden Sunset.png, 02 — Neon Tokyo Ni
           </div>
         )}
 
-        {/* Over-limit Warning */}
-        {parsedPrompts.length > 10 && (
-          <div className="mb-4 bg-warning/15 border border-warning/50 rounded-lg px-4 py-3 flex items-start gap-3">
-            <svg className="w-5 h-5 text-warning shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+        {/* Auto-split notice */}
+        {parsedPrompts.length > GROUP_SIZE && (
+          <div className="mb-4 bg-champagne/10 border border-champagne/30 rounded-lg px-4 py-3 flex items-start gap-3">
+            <svg className="w-5 h-5 text-champagne shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
             <div>
               <p className="text-bone font-bold text-sm leading-snug">
-                More than 10 prompts detected
+                {parsedPrompts.length} prompts — running as {Math.ceil(parsedPrompts.length / GROUP_SIZE)} groups of up to {GROUP_SIZE}
               </p>
               <p className="text-bone-muted text-xs mt-0.5 leading-relaxed">
-                This may cause interruptions and the app might not work properly. We recommend splitting into smaller batches.
+                Handled for you, one group after another. Keep this tab open and images will keep arriving.
               </p>
             </div>
           </div>
@@ -715,7 +787,9 @@ Each image will download as:  01 — The Golden Sunset.png, 02 — Neon Tokyo Ni
           className="w-full bg-champagne hover:bg-champagne-hi text-canvas disabled:opacity-40 disabled:cursor-not-allowed text-bone font-bold py-4 px-6 rounded-xl transition-all duration-200 text-lg shadow-lg shadow-champagne/15 hover:shadow-champagne/30"
         >
           {isLoading
-            ? `Generating... (${progress.current}/${progress.total})`
+            ? groupProgress.total > 1
+              ? `Generating... (${progress.current}/${progress.total} — group ${groupProgress.current} of ${groupProgress.total})`
+              : `Generating... (${progress.current}/${progress.total})`
             : parsedPrompts.length > 0
             ? `Generate All ${parsedPrompts.length} Images — $${totalCost.toFixed(3)}`
             : 'Paste prompts above to get started'}

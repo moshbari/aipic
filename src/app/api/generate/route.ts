@@ -219,7 +219,7 @@ async function generateSingleImage(
   try {
     let imageUrl = '';
 
-    // GPT Image models (gpt-image-1.5, gpt-image-1, gpt-image-1-mini)
+    // GPT Image models (gpt-image-2, gpt-image-1.5, gpt-image-1, gpt-image-1-mini)
     const response = await openai.images.generate({
       model: model as any,
       prompt,
