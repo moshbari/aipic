@@ -19,7 +19,7 @@ export const MODELS: { [key: string]: ModelConfig } = {
     provider: 'openai',
     description: 'Latest flagship model. Best quality, strongest prompt following, photorealistic results.',
     qualityNote: 'Low = fast drafts, Medium = good balance, High = photorealistic detail',
-    sizes: ['1024x1024', '1536x1024', '1024x1536', 'auto'],
+    sizes: ['1024x1024', '1536x1024', '1536x864', '1024x1536', 'auto'],
     qualities: ['low', 'medium', 'high'],
     pricing: {
       '1024x1024-low': 0.006,
@@ -28,6 +28,13 @@ export const MODELS: { [key: string]: ModelConfig } = {
       '1536x1024-low': 0.005,
       '1536x1024-medium': 0.041,
       '1536x1024-high': 0.165,
+      // 16:9. OpenAI publishes per-image prices only for its three standard
+      // sizes, so we quote 1536x864 at the 1536x1024 rate. It has ~16% fewer
+      // pixels, so the real charge should land at or under this figure —
+      // deliberately erring high rather than under-quoting the user.
+      '1536x864-low': 0.005,
+      '1536x864-medium': 0.041,
+      '1536x864-high': 0.165,
       '1024x1536-low': 0.005,
       '1024x1536-medium': 0.041,
       '1024x1536-high': 0.165,
@@ -115,6 +122,22 @@ export const MODELS: { [key: string]: ModelConfig } = {
     defaultQuality: 'medium',
   },
 };
+
+// Plain-language names for the size dropdown — "1536x864" tells a user nothing,
+// "16:9 widescreen" tells them exactly what they're picking.
+const SIZE_LABELS: { [size: string]: string } = {
+  '1024x1024': 'Square (1:1)',
+  '1536x1024': 'Landscape (3:2)',
+  '1536x864': 'Widescreen (16:9)',
+  '1024x1536': 'Portrait (2:3)',
+  auto: 'Auto (let AI decide)',
+};
+
+export function sizeLabel(size: string): string {
+  const label = SIZE_LABELS[size];
+  if (!label) return size;
+  return size === 'auto' ? label : `${label} — ${size}`;
+}
 
 export function calculateCost(
   modelId: string,

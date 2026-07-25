@@ -3,7 +3,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { decryptApiKey } from '@/lib/encryption';
-import { calculateCost } from '@/lib/models';
+import { calculateCost, MODELS } from '@/lib/models';
 import { isGHLConfigured, uploadFromUrlToGHL, uploadBase64ToGHL } from '@/lib/ghl';
 import { v4 as uuidv4 } from 'uuid';
 import OpenAI from 'openai';
@@ -131,35 +131,47 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// Valid sizes for GPT Image models
-const VALID_PIXEL_SIZES = ['1024x1024', '1536x1024', '1024x1536', 'auto'];
-
 /**
  * Smart dimension extraction from prompt text.
  * Handles:
  *  1. Pixel dimensions: "1024x1536", "1536 x 1024"
- *  2. Inch dimensions: "6x3.5 inches", "5x5 inches", "6 x 4 inches"
- *  3. Keywords: "landscape", "portrait", "square"
- *  4. Size labels: "Size: landscape 6x3.5 inches"
+ *  2. Aspect ratios: "16:9", "widescreen"
+ *  3. Inch dimensions: "6x3.5 inches", "5x5 inches", "6 x 4 inches"
+ *  4. Keywords: "landscape", "portrait", "square"
+ *  5. Size labels: "Size: landscape 6x3.5 inches"
  *
  * Inch-based logic: compares width vs height aspect ratio
  *   - width > height (landscape) → 1536x1024
  *   - width < height (portrait)  → 1024x1536
  *   - width ≈ height (square)    → 1024x1024
+ *
+ * Only sizes the chosen model actually accepts are returned — 16:9 exists on
+ * gpt-image-2 but not on the older models, and asking one of them for a size
+ * it doesn't offer is a hard API error.
  */
-function extractSizeFromPrompt(prompt: string): string | null {
+function extractSizeFromPrompt(prompt: string, model: string): string | null {
   const lower = prompt.toLowerCase();
+  const allowed = MODELS[model]?.sizes || ['1024x1024', '1536x1024', '1024x1536', 'auto'];
+  const pick = (size: string) => (allowed.includes(size) ? size : null);
 
   // 1. Check for exact pixel dimensions first (e.g. "1024x1536")
   const pixelMatch = prompt.match(/\b(\d{3,4})\s*[xX×]\s*(\d{3,4})\b/);
   if (pixelMatch) {
     const extracted = `${pixelMatch[1]}x${pixelMatch[2]}`;
-    if (VALID_PIXEL_SIZES.includes(extracted)) {
+    if (allowed.includes(extracted)) {
       return extracted;
     }
   }
 
-  // 2. Check for inch dimensions (e.g. "6x3.5 inches", "5 x 5 inches", "6x3.5"")
+  // 2. Widescreen requests — "16:9", "16x9", "widescreen"
+  if (/\b16\s*[:x×]\s*9\b/.test(lower) || lower.includes('widescreen')) {
+    const wide = pick('1536x864');
+    if (wide) return wide;
+    // Model has no true 16:9 — nearest available is the 3:2 landscape
+    return pick('1536x1024');
+  }
+
+  // 3. Check for inch dimensions (e.g. "6x3.5 inches", "5 x 5 inches", "6x3.5"")
   //    Matches patterns like: 6x3.5, 5x5, 6 x 4, 6×3.5 — with optional "inches"/"in" after
   const inchMatch = prompt.match(/\b(\d+(?:\.\d+)?)\s*[xX×]\s*(\d+(?:\.\d+)?)\s*(?:inches|inch|in\b|")?/i);
   if (inchMatch) {
@@ -167,16 +179,21 @@ function extractSizeFromPrompt(prompt: string): string | null {
     const h = parseFloat(inchMatch[2]);
     if (w > 0 && h > 0) {
       const ratio = w / h;
-      if (ratio > 1.15) return '1536x1024';      // landscape
-      if (ratio < 0.87) return '1024x1536';       // portrait
-      return '1024x1024';                          // square-ish
+      // Close to 16:9 (1.78) gets the true widescreen size when available
+      if (ratio > 1.65 && ratio < 1.9) {
+        const wide = pick('1536x864');
+        if (wide) return wide;
+      }
+      if (ratio > 1.15) return pick('1536x1024');  // landscape
+      if (ratio < 0.87) return pick('1024x1536');   // portrait
+      return pick('1024x1024');                      // square-ish
     }
   }
 
-  // 3. Check for orientation keywords as fallback
-  if (lower.includes('landscape')) return '1536x1024';
-  if (lower.includes('portrait')) return '1024x1536';
-  if (lower.includes('square')) return '1024x1024';
+  // 4. Check for orientation keywords as fallback
+  if (lower.includes('landscape')) return pick('1536x1024');
+  if (lower.includes('portrait')) return pick('1024x1536');
+  if (lower.includes('square')) return pick('1024x1024');
 
   return null;
 }
@@ -196,7 +213,7 @@ async function generateSingleImage(
   const { prompt, model, quality, size, batchId, userId, index } = params;
 
   // Check if the prompt contains a dimension — if so, it overrides the global size setting
-  const promptSize = extractSizeFromPrompt(prompt);
+  const promptSize = extractSizeFromPrompt(prompt, model);
   const effectiveSize = promptSize || size || '1024x1024';
 
   const cost = calculateCost(model, effectiveSize, quality);
@@ -223,7 +240,9 @@ async function generateSingleImage(
     const response = await openai.images.generate({
       model: model as any,
       prompt,
-      size: effectiveSize as '1024x1024' | '1536x1024' | '1024x1536' | 'auto',
+      // gpt-image-2 accepts any size meeting OpenAI's constraints (multiples of
+      // 16, max edge 3840, ratio within 3:1), which is wider than the SDK's union
+      size: effectiveSize as any,
       quality: (quality || 'medium') as 'low' | 'medium' | 'high',
       n: 1,
     });

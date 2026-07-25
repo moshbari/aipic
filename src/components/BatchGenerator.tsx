@@ -2,43 +2,56 @@
 
 import { useState, useMemo, useCallback } from 'react';
 import { useSession } from 'next-auth/react';
-import { MODELS, calculateCost, getModelSizes, getModelQualities, getCostSummary, formatPrice } from '@/lib/models';
+import { MODELS, calculateCost, getModelSizes, getModelQualities, getCostSummary, formatPrice, sizeLabel } from '@/lib/models';
 
 // Big batches are split into groups this size and sent one group at a time.
 // Keeps every request comfortably inside the server's 5 minute limit, so the
 // user can paste 50 prompts and walk away.
 const GROUP_SIZE = 10;
 
-// Client-side mirror of the server's smart dimension detection
-function detectSizeFromPrompt(prompt: string): string | null {
+// Client-side mirror of the server's smart dimension detection.
+// Keep in sync with extractSizeFromPrompt in src/app/api/generate/route.ts —
+// this one only drives the cost preview, the server's is authoritative.
+function detectSizeFromPrompt(prompt: string, model: string): string | null {
   const lower = prompt.toLowerCase();
+  const allowed = MODELS[model]?.sizes || ['1024x1024', '1536x1024', '1024x1536', 'auto'];
+  const pick = (size: string) => (allowed.includes(size) ? size : null);
 
   // 1. Exact pixel dimensions (e.g. "1024x1536")
   const pixelMatch = prompt.match(/\b(\d{3,4})\s*[xX×]\s*(\d{3,4})\b/);
   if (pixelMatch) {
     const extracted = `${pixelMatch[1]}x${pixelMatch[2]}`;
-    if (['1024x1024', '1536x1024', '1024x1536', 'auto'].includes(extracted)) {
+    if (allowed.includes(extracted)) {
       return extracted;
     }
   }
 
-  // 2. Inch dimensions (e.g. "6x3.5 inches", "5x5 inches")
+  // 2. Widescreen requests — "16:9", "16x9", "widescreen"
+  if (/\b16\s*[:x×]\s*9\b/.test(lower) || lower.includes('widescreen')) {
+    return pick('1536x864') || pick('1536x1024');
+  }
+
+  // 3. Inch dimensions (e.g. "6x3.5 inches", "5x5 inches")
   const inchMatch = prompt.match(/\b(\d+(?:\.\d+)?)\s*[xX×]\s*(\d+(?:\.\d+)?)\s*(?:inches|inch|in\b|")?/i);
   if (inchMatch) {
     const w = parseFloat(inchMatch[1]);
     const h = parseFloat(inchMatch[2]);
     if (w > 0 && h > 0) {
       const ratio = w / h;
-      if (ratio > 1.15) return '1536x1024';
-      if (ratio < 0.87) return '1024x1536';
-      return '1024x1024';
+      if (ratio > 1.65 && ratio < 1.9) {
+        const wide = pick('1536x864');
+        if (wide) return wide;
+      }
+      if (ratio > 1.15) return pick('1536x1024');
+      if (ratio < 0.87) return pick('1024x1536');
+      return pick('1024x1024');
     }
   }
 
-  // 3. Orientation keywords
-  if (lower.includes('landscape')) return '1536x1024';
-  if (lower.includes('portrait')) return '1024x1536';
-  if (lower.includes('square')) return '1024x1024';
+  // 4. Orientation keywords
+  if (lower.includes('landscape')) return pick('1536x1024');
+  if (lower.includes('portrait')) return pick('1024x1536');
+  if (lower.includes('square')) return pick('1024x1024');
 
   return null;
 }
@@ -232,7 +245,7 @@ export function BatchGenerator() {
   // Calculate cost per prompt (accounting for per-prompt dimension overrides)
   const promptCosts = useMemo(() => {
     return parsedPrompts.map((prompt) => {
-      const detectedSize = detectSizeFromPrompt(prompt);
+      const detectedSize = detectSizeFromPrompt(prompt, selectedModel);
       const effectiveSize = detectedSize || size;
       return {
         detectedSize,
@@ -543,7 +556,7 @@ export function BatchGenerator() {
               >
                 {sizes.map((s) => (
                   <option key={s} value={s}>
-                    {s === 'auto' ? 'Auto (let AI decide)' : s}
+                    {sizeLabel(s)}
                   </option>
                 ))}
               </select>
