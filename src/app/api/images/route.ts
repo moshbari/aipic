@@ -39,6 +39,7 @@ export async function GET(request: NextRequest) {
           imageUrl: true,
           batchId: true,
           status: true,
+          errorMessage: true,
           createdAt: true,
         },
       }),

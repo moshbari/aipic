@@ -235,6 +235,11 @@ export function BatchGenerator() {
   const [autoDownload, setAutoDownload] = useState(true);
   const [selectedIndices, setSelectedIndices] = useState<Set<number>>(new Set());
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
+  // The page owns the batch id so a run can always be traced back to its rows
+  const [batchId, setBatchId] = useState<string | null>(null);
+  const [isRetrying, setIsRetrying] = useState(false);
+  const [retryProgress, setRetryProgress] = useState({ current: 0, total: 0 });
+  const [recoveryNotice, setRecoveryNotice] = useState<string | null>(null);
 
   // Parse prompts based on selected separator
   const parsedPrompts = useMemo(
@@ -373,11 +378,72 @@ export function BatchGenerator() {
     copyToClipboard(text, "multi");
   }, [selectedIndices, results, copyToClipboard]);
 
+  // Match rows coming back from the database onto the cards on screen. Rows
+  // are created in prompt order and two identical prompts are interchangeable,
+  // so lining them up by prompt text, in order, is exact.
+  const applyRows = (cards: GenerationResult[], rows: GenerationResult[]): GenerationResult[] => {
+    const pool = new Map<string, GenerationResult[]>();
+    rows.forEach((row) => {
+      const list = pool.get(row.prompt) || [];
+      list.push(row);
+      pool.set(row.prompt, list);
+    });
+    return cards.map((card) => {
+      const match = (pool.get(card.prompt) || []).shift();
+      if (!match) return card;
+      // A card that already has its picture is never downgraded
+      if (card.status === 'done' && card.imageUrl) return card;
+      return { ...card, ...match };
+    });
+  };
+
+  /**
+   * The reply to a group can go missing — a proxy timeout, a sleeping laptop,
+   * dropped wifi — while the images are made and paid for anyway. Ask the
+   * server what actually landed instead of writing the group off and paying
+   * for the same pictures a second time.
+   */
+  const reconcile = async (
+    id: string,
+    cards: GenerationResult[],
+    { wait = false }: { wait?: boolean } = {}
+  ): Promise<GenerationResult[]> => {
+    const attempts = wait ? 12 : 1; // up to ~3 minutes of waiting
+    let current = cards;
+    for (let attempt = 0; attempt < attempts; attempt++) {
+      try {
+        const res = await fetch(`/api/generate?batchId=${encodeURIComponent(id)}`);
+        if (!res.ok) break;
+        const data = await res.json();
+        current = applyRows(current, (data.results || []) as GenerationResult[]);
+        setResults(current);
+        if (!data.stillRunning) break;
+      } catch (err) {
+        console.error('Could not read batch status:', err);
+        break;
+      }
+      if (attempt < attempts - 1) {
+        setRecoveryNotice('A group timed out — checking which of those images were finished anyway...');
+        await new Promise((r) => setTimeout(r, 15000));
+      }
+    }
+    setRecoveryNotice(null);
+    return current;
+  };
+
   const handleGenerate = async () => {
     if (parsedPrompts.length === 0) {
       alert('Please enter at least one prompt');
       return;
     }
+
+    // The page owns the batch id, so a lost reply can still be traced back to
+    // exactly these images.
+    const runBatchId =
+      typeof crypto !== 'undefined' && crypto.randomUUID
+        ? crypto.randomUUID()
+        : `b-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    setBatchId(runBatchId);
 
     // Split into groups of GROUP_SIZE and run them back to back
     const groups: { prompts: string[]; offset: number }[] = [];
@@ -389,13 +455,20 @@ export function BatchGenerator() {
     setProgress({ current: 0, total: parsedPrompts.length });
     setSelectedIndices(new Set());
     setGroupProgress({ current: 1, total: groups.length });
-    setResults(
-      parsedPrompts.map((p) => ({
-        prompt: p,
-        status: 'pending',
-        cost: costPerImage,
-      }))
-    );
+
+    // One local copy of the cards for the whole run, mirrored into state after
+    // every change — so recovery and retries always work from what is real.
+    let cards: GenerationResult[] = parsedPrompts.map((p) => ({
+      prompt: p,
+      status: 'pending',
+      cost: costPerImage,
+    }));
+    setResults(cards);
+
+    const write = (next: GenerationResult[]) => {
+      cards = next;
+      setResults(next);
+    };
 
     let processed = 0;
 
@@ -404,21 +477,20 @@ export function BatchGenerator() {
       setGroupProgress({ current: g + 1, total: groups.length });
 
       // Mark this group as in-flight so the user can see where we are
-      setResults((prev) => {
-        const next = [...prev];
-        group.prompts.forEach((p, i) => {
-          next[group.offset + i] = { ...next[group.offset + i], status: 'generating' };
-        });
-        return next;
-      });
-
-      let groupResults: GenerationResult[] | null = null;
+      write(
+        cards.map((card, i) =>
+          i >= group.offset && i < group.offset + group.prompts.length
+            ? { ...card, status: 'generating' }
+            : card
+        )
+      );
 
       try {
         const response = await fetch('/api/generate', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
+            batchId: runBatchId,
             prompts: group.prompts,
             model: selectedModel,
             quality: quality || undefined,
@@ -433,15 +505,13 @@ export function BatchGenerator() {
           // stop now instead of burning through the rest.
           if (response.status === 400 || response.status === 401) {
             alert(`Error: ${error.error}`);
-            setResults((prev) => {
-              const next = [...prev];
-              for (let i = group.offset; i < next.length; i++) {
-                if (next[i].status === 'pending' || next[i].status === 'generating') {
-                  next[i] = { ...next[i], status: 'failed', errorMessage: error.error };
-                }
-              }
-              return next;
-            });
+            write(
+              cards.map((card, i) =>
+                i >= group.offset && (card.status === 'pending' || card.status === 'generating')
+                  ? { ...card, status: 'failed', errorMessage: error.error, cost: 0 }
+                  : card
+              )
+            );
             setIsLoading(false);
             return;
           }
@@ -450,36 +520,41 @@ export function BatchGenerator() {
         }
 
         const data = await response.json();
-        groupResults = data.results as GenerationResult[];
+        const groupResults = (data.results || []) as GenerationResult[];
+        write(
+          cards.map((card, i) => {
+            const inGroup = i >= group.offset && i < group.offset + group.prompts.length;
+            const r = inGroup ? groupResults[i - group.offset] : undefined;
+            return r ? { ...card, ...r } : card;
+          })
+        );
       } catch (error: any) {
-        // This group broke — record it and carry on with the next one so a
-        // single hiccup doesn't throw away a 50 image run.
+        // This group broke. Before calling anything failed, ask the database
+        // what really happened — then carry on with the next group so a single
+        // hiccup doesn't throw away a 50 image run.
         console.error(`Group ${g + 1} error:`, error);
-        groupResults = group.prompts.map((p) => ({
-          prompt: p,
-          status: 'failed' as const,
-          errorMessage: error?.message || 'Generation failed',
-          cost: costPerImage,
-        }));
+        const message = error?.message || 'Generation failed';
+        write(await reconcile(runBatchId, cards, { wait: true }));
+        write(
+          cards.map((card, i) =>
+            i >= group.offset &&
+            i < group.offset + group.prompts.length &&
+            card.status !== 'done'
+              ? { ...card, status: 'failed', errorMessage: card.errorMessage || message, cost: 0 }
+              : card
+          )
+        );
       }
-
-      setResults((prev) => {
-        const next = [...prev];
-        groupResults!.forEach((r, i) => {
-          next[group.offset + i] = r;
-        });
-        return next;
-      });
 
       processed += group.prompts.length;
       setProgress({ current: processed, total: parsedPrompts.length });
 
       // Download this group's images now rather than waiting for every group
       if (autoDownload) {
-        for (let i = 0; i < groupResults.length; i++) {
-          const result = groupResults[i];
-          if (result.imageUrl && result.status === 'done') {
-            await downloadImage(result.imageUrl, result.prompt, group.offset + i);
+        for (let i = group.offset; i < group.offset + group.prompts.length; i++) {
+          const result = cards[i];
+          if (result?.imageUrl && result.status === 'done') {
+            await downloadImage(result.imageUrl, result.prompt, i);
             // Small delay between downloads so browser doesn't block them
             await new Promise((resolve) => setTimeout(resolve, 300));
           }
@@ -489,6 +564,142 @@ export function BatchGenerator() {
 
     setIsLoading(false);
   };
+
+  /**
+   * Try the failed cards again — in place.
+   *
+   * Rows that already have an image are handed straight back by the server, so
+   * pressing this can never make a second copy of a picture that worked, and
+   * never charges for one twice. Nothing new is appended: each card is filled
+   * in where it already sits.
+   */
+  const retryIndices = useCallback(
+    async (indices: number[]) => {
+      const targets = indices.filter(
+        (i) => results[i] && results[i].status === 'failed'
+      );
+      if (targets.length === 0 || isRetrying || isLoading) return;
+
+      setIsRetrying(true);
+      setRetryProgress({ current: 0, total: targets.length });
+
+      let cards = results.map((card, i) =>
+        targets.includes(i) ? { ...card, status: 'generating', errorMessage: undefined } : card
+      );
+      setResults(cards);
+
+      const write = (next: GenerationResult[]) => {
+        cards = next;
+        setResults(next);
+      };
+
+      // Cards the server already knows about are retried by id, so the same
+      // database row is reused. Cards that never reached the server (the whole
+      // request died) go back through the normal path, where the batch id stops
+      // any duplicate being created.
+      const withId = targets.filter((i) => results[i].id);
+      const withoutId = targets.filter((i) => !results[i].id);
+      const runs: { indices: number[]; body: any }[] = [];
+
+      for (let i = 0; i < withId.length; i += GROUP_SIZE) {
+        const slice = withId.slice(i, i + GROUP_SIZE);
+        runs.push({
+          indices: slice,
+          body: { retryImageIds: slice.map((idx) => results[idx].id) },
+        });
+      }
+      for (let i = 0; i < withoutId.length; i += GROUP_SIZE) {
+        const slice = withoutId.slice(i, i + GROUP_SIZE);
+        runs.push({
+          indices: slice,
+          body: {
+            batchId: batchId || undefined,
+            prompts: slice.map((idx) => results[idx].prompt),
+            model: selectedModel,
+            quality: quality || undefined,
+            size,
+          },
+        });
+      }
+
+      let done = 0;
+
+      for (const run of runs) {
+        try {
+          const response = await fetch('/api/generate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(run.body),
+          });
+          if (!response.ok) {
+            const error = await response.json().catch(() => ({ error: 'Request failed' }));
+            throw new Error(error.error || 'Retry failed');
+          }
+          const data = await response.json();
+          const rows = (data.results || []) as GenerationResult[];
+          write(
+            cards.map((card, i) => {
+              const pos = run.indices.indexOf(i);
+              return pos === -1 || !rows[pos] ? card : { ...card, ...rows[pos] };
+            })
+          );
+        } catch (error: any) {
+          const message = error?.message || 'Retry failed';
+          if (batchId) write(await reconcile(batchId, cards, { wait: true }));
+          write(
+            cards.map((card, i) =>
+              run.indices.includes(i) && card.status !== 'done'
+                ? { ...card, status: 'failed', errorMessage: message, cost: 0 }
+                : card
+            )
+          );
+        }
+
+        done += run.indices.length;
+        setRetryProgress({ current: done, total: targets.length });
+
+        if (autoDownload) {
+          for (const i of run.indices) {
+            const card = cards[i];
+            if (card?.imageUrl && card.status === 'done') {
+              await downloadImage(card.imageUrl, card.prompt, i);
+              await new Promise((resolve) => setTimeout(resolve, 300));
+            }
+          }
+        }
+      }
+
+      // A card can come back still marked "generating" when the first attempt is
+      // genuinely still running on the server — wait it out rather than leaving
+      // a spinner on screen forever.
+      if (batchId && targets.some((i) => cards[i]?.status === 'generating')) {
+        write(await reconcile(batchId, cards, { wait: true }));
+        write(
+          cards.map((card, i) =>
+            targets.includes(i) && card.status === 'generating'
+              ? {
+                  ...card,
+                  status: 'failed',
+                  errorMessage: 'Still running on the server — try again in a few minutes.',
+                  cost: 0,
+                }
+              : card
+          )
+        );
+      }
+
+      setIsRetrying(false);
+      setRetryProgress({ current: 0, total: 0 });
+    },
+    [results, isRetrying, isLoading, batchId, selectedModel, quality, size, autoDownload, downloadImage]
+  );
+
+  const failedIndices = useMemo(
+    () => results.map((r, i) => (r.status === 'failed' ? i : -1)).filter((i) => i !== -1),
+    [results]
+  );
+
+  const retryAllFailed = useCallback(() => retryIndices(failedIndices), [retryIndices, failedIndices]);
 
   const downloadAll = async () => {
     const doneResults = results.filter((r) => r.status === 'done' && r.imageUrl);
@@ -776,6 +987,20 @@ Each image will download as:  01 — The Golden Sunset.png, 02 — Neon Tokyo Ni
           </div>
         )}
 
+        {/* Recovery notice — a group's reply went missing and we're checking
+            the server for images that were finished anyway */}
+        {recoveryNotice && (
+          <div className="mb-4 bg-warning/10 border border-warning/30 rounded-lg px-4 py-3 flex items-start gap-3">
+            <span className="w-4 h-4 mt-0.5 border-2 border-warning border-t-transparent rounded-full animate-spin shrink-0" />
+            <div>
+              <p className="text-bone font-bold text-sm leading-snug">{recoveryNotice}</p>
+              <p className="text-bone-muted text-xs mt-0.5 leading-relaxed">
+                Anything already made is picked up here — you are not charged for it again. Keep this tab open.
+              </p>
+            </div>
+          </div>
+        )}
+
         {/* Auto-split notice */}
         {parsedPrompts.length > GROUP_SIZE && (
           <div className="mb-4 bg-champagne/10 border border-champagne/30 rounded-lg px-4 py-3 flex items-start gap-3">
@@ -821,8 +1046,29 @@ Each image will download as:  01 — The Golden Sunset.png, 02 — Neon Tokyo Ni
                 </span>
               )}
             </h3>
-            {results.some((r) => r.status === 'done') && (
-              <div className="flex flex-wrap items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              {failedIndices.length > 0 && (
+                <button
+                  onClick={retryAllFailed}
+                  disabled={isRetrying || isLoading}
+                  className="bg-danger/15 hover:bg-danger/25 text-danger border border-danger/40 disabled:opacity-40 disabled:cursor-not-allowed px-4 py-2 rounded-lg text-sm font-bold transition flex items-center gap-2"
+                  title="Generate the failed ones again. Images that already worked are left alone — you are never charged twice."
+                >
+                  {isRetrying ? (
+                    <>
+                      <span className="w-3.5 h-3.5 border-2 border-danger border-t-transparent rounded-full animate-spin" />
+                      Retrying {retryProgress.current}/{retryProgress.total}...
+                    </>
+                  ) : (
+                    <>
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
+                      Retry {failedIndices.length} failed
+                    </>
+                  )}
+                </button>
+              )}
+              {results.some((r) => r.status === 'done') && (
+              <>
                 <button
                   onClick={selectAllDone}
                   className="bg-surface-2 hover:bg-surface-2 text-bone-muted hover:text-bone px-3 py-2 rounded-lg text-xs font-medium transition border border-border-soft"
@@ -861,8 +1107,9 @@ Each image will download as:  01 — The Golden Sunset.png, 02 — Neon Tokyo Ni
                 >
                   Download All
                 </button>
-              </div>
-            )}
+              </>
+              )}
+            </div>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {results.map((result, index) => {
@@ -926,7 +1173,15 @@ Each image will download as:  01 — The Golden Sunset.png, 02 — Neon Tokyo Ni
                   <div className="w-full h-52 bg-danger/10 flex items-center justify-center border-b border-danger/30">
                     <div className="text-center px-4">
                       <p className="text-danger font-medium text-sm mb-1">Failed</p>
-                      <p className="text-danger/80 text-xs">{result.errorMessage}</p>
+                      <p className="text-danger/80 text-xs line-clamp-3">{result.errorMessage}</p>
+                      <p className="text-taupe text-[11px] mt-1">Nothing was charged for this one.</p>
+                      <button
+                        onClick={() => retryIndices([index])}
+                        disabled={isRetrying || isLoading}
+                        className="mt-2 bg-surface-2 hover:bg-champagne hover:text-canvas text-bone border border-border-soft disabled:opacity-40 disabled:cursor-not-allowed rounded-lg px-3 py-1.5 text-xs font-semibold transition"
+                      >
+                        Try again
+                      </button>
                     </div>
                   </div>
                 )}
@@ -937,7 +1192,7 @@ Each image will download as:  01 — The Golden Sunset.png, 02 — Neon Tokyo Ni
                   <p className="text-bone-muted text-xs line-clamp-2 leading-relaxed mt-1">{result.prompt}</p>
                   <div className="flex justify-between items-center mt-2">
                     <p className="text-champagne/80 text-xs">
-                      ${result.cost.toFixed(4)}
+                      {result.status === 'failed' ? 'not charged' : `$${result.cost.toFixed(4)}`}
                     </p>
                     <span className={`text-xs px-2 py-0.5 rounded-full ${
                       result.status === 'done' ? 'bg-success/15 text-success' :

@@ -13,6 +13,7 @@ interface ImageItem {
   imageUrl: string;
   batchId: string;
   status: string;
+  errorMessage?: string;
   createdAt: string;
 }
 
@@ -67,6 +68,57 @@ export function ImageGallery() {
   const [selectedImage, setSelectedImage] = useState<ImageItem | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
+  const [retryingIds, setRetryingIds] = useState<Set<string>>(new Set());
+
+  const failedOnPage = images.filter((img) => img.status !== 'done' || !img.imageUrl);
+
+  /**
+   * Try failed pictures again, in place.
+   *
+   * The server reuses the same row, and hands back any picture that actually
+   * worked instead of making it again — so this can never leave two copies
+   * behind, and never bills for the same picture twice.
+   */
+  const retryImages = async (ids: string[]) => {
+    const targets = ids.filter((id) => !retryingIds.has(id));
+    if (targets.length === 0) return;
+
+    setRetryingIds((prev) => new Set([...prev, ...targets]));
+    try {
+      const response = await fetch('/api/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ retryImageIds: targets }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data?.error || 'Retry failed');
+
+      const byId = new Map<string, any>((data.results || []).map((r: any) => [r.id, r]));
+      setImages((prev) =>
+        prev.map((img) => {
+          const row = byId.get(img.id);
+          return row
+            ? {
+                ...img,
+                status: row.status,
+                imageUrl: row.imageUrl || '',
+                cost: row.cost ?? img.cost,
+                errorMessage: row.errorMessage,
+              }
+            : img;
+        })
+      );
+    } catch (error: any) {
+      console.error('Retry error:', error);
+      alert(error?.message || 'Retry failed. Please try again in a moment.');
+    } finally {
+      setRetryingIds((prev) => {
+        const next = new Set(prev);
+        targets.forEach((id) => next.delete(id));
+        return next;
+      });
+    }
+  };
 
   const fetchImages = async (page: number) => {
     if (!session?.user?.id) return;
@@ -185,6 +237,18 @@ export function ImageGallery() {
               )}
             </div>
             <div className="flex flex-wrap items-center gap-2">
+              {failedOnPage.length > 0 && (
+                <button
+                  onClick={() => retryImages(failedOnPage.map((img) => img.id))}
+                  disabled={retryingIds.size > 0}
+                  className="bg-danger/15 hover:bg-danger/25 text-danger border border-danger/40 disabled:opacity-40 disabled:cursor-not-allowed px-3 py-2 rounded-lg text-xs font-bold transition"
+                  title="Generate the failed ones again. Pictures that already worked are left alone — you are never charged twice."
+                >
+                  {retryingIds.size > 0
+                    ? `Retrying ${retryingIds.size}...`
+                    : `Retry ${failedOnPage.length} failed`}
+                </button>
+              )}
               <button
                 onClick={selectAllOnPage}
                 className="bg-surface-2 hover:bg-surface-2 text-bone-muted hover:text-bone px-3 py-2 rounded-lg text-xs font-medium transition border border-border-soft"
@@ -233,6 +297,33 @@ export function ImageGallery() {
                       : 'border-champagne hover:border-blue-500'
                   }`}
                 >
+                  {image.status !== 'done' || !image.imageUrl ? (
+                  <div className="relative overflow-hidden bg-danger/10 h-48 flex items-center justify-center border-b border-danger/30">
+                    <div className="text-center px-4">
+                      <p className="text-danger font-medium text-sm mb-1">
+                        {retryingIds.has(image.id)
+                          ? 'Trying again...'
+                          : image.status === 'generating'
+                          ? 'Still working...'
+                          : 'Failed'}
+                      </p>
+                      {image.errorMessage && !retryingIds.has(image.id) && (
+                        <p className="text-danger/80 text-xs line-clamp-3">{image.errorMessage}</p>
+                      )}
+                      <p className="text-taupe text-[11px] mt-1">Nothing was charged for this one.</p>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          retryImages([image.id]);
+                        }}
+                        disabled={retryingIds.has(image.id)}
+                        className="mt-2 bg-surface-2 hover:bg-champagne hover:text-canvas text-bone border border-border-soft disabled:opacity-40 disabled:cursor-not-allowed rounded-lg px-3 py-1.5 text-xs font-semibold transition"
+                      >
+                        Try again
+                      </button>
+                    </div>
+                  </div>
+                  ) : (
                   <div
                     className="relative overflow-hidden bg-surface-2 h-48 cursor-pointer"
                     onClick={() => setSelectedImage(image)}
@@ -256,6 +347,7 @@ export function ImageGallery() {
                       <span className="text-[11px] text-bone font-medium">Select</span>
                     </label>
                   </div>
+                  )}
                   <div className="p-3">
                     <p className="text-bone font-semibold text-sm leading-snug line-clamp-1" title={title}>
                       {title}
@@ -264,8 +356,11 @@ export function ImageGallery() {
                       {image.prompt}
                     </p>
                     <p className="text-champagne text-xs mt-2">
-                      {image.model} • ${image.cost.toFixed(4)}
+                      {image.model} • {image.status === 'done' && image.imageUrl
+                        ? `$${image.cost.toFixed(4)}`
+                        : 'not charged'}
                     </p>
+                    {image.status === 'done' && image.imageUrl && (
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
@@ -286,6 +381,7 @@ export function ImageGallery() {
                         </>
                       )}
                     </button>
+                    )}
                   </div>
                 </div>
               );
