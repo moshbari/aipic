@@ -54,7 +54,12 @@ export async function GET(request: NextRequest) {
         },
       }),
       prisma.generatedImage.count({ where }),
-      prisma.generatedImage.aggregate({ where, _sum: { cost: true } }),
+      // Only pictures that actually arrived cost money — a failed row must
+      // never add to the spend line (older ones still carry their old figure).
+      prisma.generatedImage.aggregate({
+        where: { ...where, status: 'done' },
+        _sum: { cost: true },
+      }),
     ]);
 
     return NextResponse.json({
