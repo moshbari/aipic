@@ -56,8 +56,10 @@ export async function GET(request: NextRequest) {
       prisma.generatedImage.count({ where }),
       // Only pictures that actually arrived cost money — a failed row must
       // never add to the spend line (older ones still carry their old figure).
+      // AND, not a spread: spreading would overwrite a `status` filter, so the
+      // Failed view would quote the whole library's spend.
       prisma.generatedImage.aggregate({
-        where: { ...where, status: 'done' },
+        where: { AND: [where, { status: 'done' }] },
         _sum: { cost: true },
       }),
     ]);
